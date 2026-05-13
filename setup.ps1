@@ -35,7 +35,7 @@ $AddInName   = "kuroagent"
 $Guid        = "14254940-5dfe-46ec-b860-a8291f526990"
 $RegPath     = "HKCU:\Software\Microsoft\Office\Excel\Addins\$Guid"
 $InstallDir  = Join-Path $env:USERPROFILE ".kuroagent"
-$RepoUrl     = "https://github.com/yannassoumou/open-kuroagent.git"
+$RepoUrl     = "https://github.com/yannassoumou/open-excel.git"
 
 # --- Interactive menu ---
 if ($Action -eq "") {
@@ -72,6 +72,11 @@ function Do-Install {
     } else {
         Write-Step "Cloning repository ..."
         git clone $RepoUrl $InstallDir 2>&1 | Out-Null
+        if (-not (Test-Path $InstallDir)) {
+            Write-Error-C "Clone failed. Make sure git is installed and the repo is accessible."
+            Write-Info "Install git: https://git-scm.com/download/win"
+            exit 1
+        }
         Write-Success "Cloned to $InstallDir"
         Set-Location $InstallDir
     }
@@ -100,16 +105,21 @@ function Do-Install {
 
     # Install dependencies
     Write-Step "Installing npm dependencies"
-    & npm install --no-audit --no-fund --loglevel=error | Out-Null
+    $npmResult = & npm install --no-audit --no-fund --loglevel=error 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error-C "npm install failed"
+        $npmResult | ForEach-Object { Write-Info $_ }
+        exit 1
+    }
     Write-Success "Dependencies installed"
 
     # Dev certs
     Write-Step "Installing dev certificates"
-    try {
-        & npx office-addin-dev-certs install --machine 2>$null | Out-Null
+    $certResult = & npx office-addin-dev-certs install --machine 2>&1
+    if ($LASTEXITCODE -eq 0) {
         Write-Success "Dev certificates installed"
-    } catch {
-        Write-Warning-C "Dev certs step returned non-zero (may already be installed)"
+    } else {
+        Write-Warning-C "Dev certs: already installed or non-zero exit"
     }
 
     # Register CLI
