@@ -197,7 +197,7 @@ function doUpdate() {
 
   log(``);
   log(`${ADDIN_NAME} updated successfully.`);
-  log(`Run \\\`kuroagent\\\` to start as usual.`);
+  log(`Run \`kuroagent\` to start as usual.`);
 }
 
 // === INSTALL (from anywhere) ===
@@ -219,7 +219,7 @@ function doInstall() {
   } catch {
     log(`[!] npm link returned non-zero`);
   }
-  log(`${ADDIN_NAME} ready. Run \\`kuroagent\\` to start.`);
+  log(`${ADDIN_NAME} ready. Run \`kuroagent\` to start.`);
 }
 
 // === SERVER HELPERS ===

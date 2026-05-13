@@ -225,45 +225,24 @@ function Do-Uninstall {
 
     # CLI
     Write-Step "Unlinking kuroagent CLI"
-    $NpmBin = & npm bin -g 2>$null
-    if (-not $NpmBin) { $NpmBin = Join-Path $env:APPDATA "npm" }
-
-    foreach ($f in @("kuroagent.cmd", "kuroagent.ps1")) {
+    $NpmBin = Join-Path $env:APPDATA "npm"
+    $RemovedAny = $false
+    foreach ($f in @("kuroagent.cmd", "kuroagent", "kuroagent.ps1")) {
         $p = Join-Path $NpmBin $f
-        if (Test-Path $p) { Remove-Item $p -Force -ErrorAction SilentlyContinue; Write-Success "Removed: $f" }
+        if (Test-Path "$p") { Remove-Item "$p" -Force -ErrorAction SilentlyContinue; Write-Success "Removed: $f"; $RemovedAny = $true }
+    }
+    # Unlink via npm
+    try { & npm uninstall -g excel-custom-functions-js 2>$null | Out-Null } catch {}
+    if (-not $RemovedAny) { Write-Warning-C "CLI wrapper not found (may not have been linked)" }
+
+    # Remove bin dir created by npm link
+    $BinSubDir = Join-Path $NpmBin "kuroagent"
+    if (Test-Path "$BinSubDir") {
+        Remove-Item "$BinSubDir" -Recurse -Force -ErrorAction SilentlyContinue
+        Write-Success "Removed: kuroagent/ bin dir"
     }
 
-    $ExcelBinDir = Join-Path $NpmBin "kuroagent"
-    if (Test-Path $ExcelBinDir) {
-        Remove-Item $ExcelBinDir -Recurse -Force -ErrorAction SilentlyContinue
-        Write-Success "Removed: kuroagent/ dir"
-    }
-
-    try { & npm uninstall -g kuroagent-custom-functions-js 2>$null | Out-Null } catch {}
-
-    # Kill server
-    if (Get-Command lsof -ErrorAction SilentlyContinue) {
-        $pids = lsof -ti :3000 2>/dev/null
-        if ($pids) { $pids | ForEach-Object { taskkill /F /PID $_ 2>$null } }
-    } else {
-        netstat -ano | Select-String ":3000" | ForEach-Object {
-            $pid = ($_ -split "\s+")[-1]
-            if ($pid -match "^\d+$") { taskkill /F /PID $pid 2>$null }
-        }
-    }
-
-    # Install dir
-    if ($RemoveDir) {
-        Write-Step "Removing installation directory: $InstallDir"
-        if (Test-Path $InstallDir) {
-            Remove-Item -Path $InstallDir -Recurse -Force -ErrorAction SilentlyContinue
-            Write-Success "Directory removed"
-        }
-    } else {
-        Write-Warning-C "Keeping $InstallDir (use 'purge' to remove)"
-    }
-
-    # Stop server
+    # Dev server
     Write-Step "Stopping dev server if running"
     try {
         $out = & cmd /c "netstat -ano | findstr :3000 | findstr LISTENING" 2>&1
@@ -281,12 +260,25 @@ function Do-Uninstall {
         Write-Warning-C "Could not check/stop server"
     }
 
+    # Install dir
+    if ($RemoveDir) {
+        Write-Step "Removing installation directory: $InstallDir"
+        if (Test-Path $InstallDir) {
+            # cd out first so Windows lets us delete it
+            Set-Location $env:USERPROFILE
+            Remove-Item -Path $InstallDir -Recurse -Force -ErrorAction SilentlyContinue
+            Write-Success "Directory removed"
+        }
+    } else {
+        Write-Warning-C "Keeping $InstallDir (use 'purge' to remove)"
+    }
+
     Write-Host "`n========================================" -ForegroundColor Green
     Write-Host "  $AddInName uninstalled successfully" -ForegroundColor Green
     Write-Host "========================================" -ForegroundColor Green
     Write-Host ""
     Write-Host "  To reinstall:" -ForegroundColor Cyan
-    Write-Host "    iwr https://raw.githubusercontent.com/yannassoumou/open-kuroagent/master/setup.ps1 -OutFile setup.ps1"
+    Write-Host "    iwr https://raw.githubusercontent.com/yannassoumou/open-excel/master/setup.ps1 -OutFile setup.ps1"
     Write-Host "    powershell -ExecutionPolicy Bypass -File .\setup.ps1"
     Write-Host ""
     Write-Host "  Note: Restart Excel to complete the uninstall." -ForegroundColor Yellow
