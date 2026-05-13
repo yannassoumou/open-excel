@@ -134,7 +134,44 @@ async function main() {
     return;
   }
 
-  // Linux/Mac: start webpack ourselves + use office-addin-debugging for sideloading
+  // macOS: start webpack + register manifest in Safari + open Excel
+  if (platform === "darwin") {
+    const serverRunning = await isServerRunning();
+    if (serverRunning) {
+      log(`Dev server already running at ${DEV_URL}`);
+    } else {
+      log(`Starting dev server ...`);
+      await startDevServer();
+    }
+    await waitForServer();
+    log(`Dev server ready at ${DEV_URL}`);
+
+    if (!noOpen) {
+      // Register the dev manifest in Safari (required for Mac sideloading)
+      log(`Registering add-in manifest ...`);
+      try {
+        execSync(`open "${DEV_URL}/manifest.dev.xml"`, { stdio: "pipe" });
+      } catch {}
+
+      // Open workbook if provided
+      if (openFile) {
+        let absPath = path.resolve(originalCwd, openFile);
+        if (!fs.existsSync(absPath)) absPath = path.resolve(repoDir, openFile);
+        if (fs.existsSync(absPath)) {
+          log(`Opening workbook: ${absPath}`);
+          try { execSync(`open -a "Microsoft Excel" "${absPath}"`, { stdio: "pipe" }); } catch {}
+        } else {
+          log(`[!] File not found: ${openFile}`);
+        }
+      } else {
+        log(`Opening Excel ...`);
+        try { execSync(`open -a "Microsoft Excel"`, { stdio: "pipe" }); } catch {}
+      }
+    }
+    return;
+  }
+
+  // Linux: start webpack + print instructions
   const serverRunning = await isServerRunning();
   if (serverRunning) {
     log(`Dev server already running at ${DEV_URL}`);
@@ -146,48 +183,20 @@ async function main() {
   log(`Dev server ready at ${DEV_URL}`);
 
   if (!noOpen) {
-    // macOS: use office-addin-debugging to launch Excel with add-in sideloaded
-    if (platform === "darwin") {
-      try {
-        let cmd = `npx office-addin-debugging start "${manifestPath}" desktop`;
-        if (openFile) {
-          let absPath = path.resolve(originalCwd, openFile);
-          if (!fs.existsSync(absPath)) absPath = path.resolve(repoDir, openFile);
-          if (fs.existsSync(absPath)) {
-            log(`Workbook: ${absPath}`);
-            cmd += ` --document "${absPath}"`;
-          } else {
-            log(`[!] File not found: ${openFile}, launching without workbook`);
-          }
-        }
-        log(`Sideload dev server and launch Excel with add-in pre-loaded.`);
-        log(`When done, quit Excel to close the process.`);
-        execSync(cmd, { cwd: repoDir, stdio: "inherit", shell: true });
-        return;
-      } catch (err) {
-        log(`[!!] office-addin-debugging failed: ${err.message}`);
-      }
-    } else {
-      // Linux: open workbook in Excel Desktop if available
-      if (openFile) {
-        let absPath = path.resolve(originalCwd, openFile);
-        if (!fs.existsSync(absPath)) absPath = path.resolve(repoDir, openFile);
-        if (fs.existsSync(absPath)) {
-          log(`Opening workbook in Excel: ${absPath}`);
-          try { execSync(`open -a "Microsoft Excel" "${absPath}"`, { stdio: "pipe" }); } catch {}
-        } else {
-          log(`[!] File not found: ${openFile}`);
-        }
+    if (openFile) {
+      let absPath = path.resolve(originalCwd, openFile);
+      if (!fs.existsSync(absPath)) absPath = path.resolve(repoDir, openFile);
+      if (fs.existsSync(absPath)) {
+        log(`Opening workbook: ${absPath}`);
+        try { execSync(`xdg-open "${absPath}"`, { stdio: "pipe" }); } catch {}
       }
     }
-    printSideloadingInstructions(manifestPath, platform === "linux" || !openFile);
+    printSideloadingInstructions(manifestPath, true);
     if (!openFile) {
       log(`To open a workbook:`);
       log(`  kuroagent -f path/to/workbook.xlsx`);
     }
   }
-
-  log(`\nKeep this terminal open for live reloading.`);
   log(`To stop:  kuroagent --stop`);
 }
 
