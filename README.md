@@ -20,10 +20,24 @@ powershell -ExecutionPolicy Bypass -File .\setup.ps1
 ### Linux / macOS
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/yannassoumou/open-excel/master/setup.sh | bash
+curl -fsSL https://raw.githubusercontent.com/yannassoumou/open-excel/master/setup.sh | bash -s -- install
 ```
 
-Both offer an interactive menu with **install**, **update**, **uninstall**, and **purge** options, or pass the action directly:
+Or download first for the interactive menu:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/yannassoumou/open-excel/master/setup.sh -o setup.sh
+bash setup.sh
+```
+
+Both offer an interactive menu (when downloaded) or direct action passing:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/yannassoumou/open-excel/master/setup.sh | bash -s -- install
+curl -fsSL https://raw.githubusercontent.com/yannassoumou/open-excel/master/setup.sh | bash -s -- update
+curl -fsSL https://raw.githubusercontent.com/yannassoumou/open-excel/master/setup.sh | bash -s -- uninstall
+curl -fsSL https://raw.githubusercontent.com/yannassoumou/open-excel/master/setup.sh | bash -s -- purge
+```
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\setup.ps1 install
