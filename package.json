@@ -19,7 +19,6 @@
     "signout": "office-addin-dev-settings m365-account logout",
     "start": "office-addin-debugging start manifest.xml desktop",
     "start:web": "office-addin-debugging start manifest.xml web",
-    "start:web:mydoc": "office-addin-debugging start --document \"https://excel.cloud.microsoft/open/onedrive/?docId=FF08C509F95FA554%21s38820707418a4d65a89f03378a20fb39&driveId=FF08C509F95FA554&wdaddindevserverport=3000&wdaddinmanifestfile=manifest.xml&wdaddinmanifestguid=14254940-5dfe-46ec-b860-a8291f526990\" manifest.dev.xml web",
     "stop": "office-addin-debugging stop manifest.xml",
     "validate": "office-addin-manifest validate manifest.xml",
     "watch": "webpack --mode development --watch",

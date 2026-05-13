@@ -102,7 +102,7 @@ Write-Host "  $AddInName uninstalled successfully" -ForegroundColor Green
 Write-Host "========================================" -ForegroundColor Green
 Write-Host ""
 Write-Host "  To reinstall:" -ForegroundColor Cyan
-Write-Host "    iwr https://raw.githubusercontent.com/yannassoumou/open-kuroagent/master/install.ps1 -OutFile install.ps1"
+Write-Host "    iwr https://raw.githubusercontent.com/yannassoumou/open-excel/master/install.ps1 -OutFile install.ps1"
 Write-Host "    powershell -ExecutionPolicy Bypass -File .\install.ps1"
 Write-Host ""
 Write-Host "  Note: Restart Excel to complete the uninstall." -ForegroundColor Yellow

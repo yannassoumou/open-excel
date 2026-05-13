@@ -2,7 +2,7 @@
 # uninstall.sh - Uninstall kuroagent Excel Add-in and development tools
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/yannassoumou/open-kuroagent/master/uninstall.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/yannassoumou/open-excel/master/uninstall.sh | bash
 #   # OR from local repo:
 #   ./uninstall.sh
 #   ./uninstall.sh --all     # Also remove the installation directory
@@ -74,6 +74,6 @@ echo -e "${GREEN}  ${ADDIN_NAME} uninstalled successfully${NC}"
 echo -e "${GREEN}════════════════════════════════════════${NC}"
 echo -e ""
 echo -e "  To reinstall:"
-echo -e "    ${CYAN}curl -fsSL https://raw.githubusercontent.com/yannassoumou/open-kuroagent/master/install.sh | bash${NC}"
+echo -e "    ${CYAN}curl -fsSL https://raw.githubusercontent.com/yannassoumou/open-excel/master/install.sh | bash${NC}"
 echo -e ""
 echo -e "  Note: Restart Excel to complete the uninstall."

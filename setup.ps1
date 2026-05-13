@@ -35,7 +35,7 @@ $AddInName   = "kuroagent"
 $Guid        = "14254940-5dfe-46ec-b860-a8291f526990"
 $RegPath     = "HKCU:\Software\Microsoft\Office\Excel\Addins\$Guid"
 $InstallDir  = Join-Path $env:USERPROFILE ".kuroagent"
-$RepoUrl     = "https://github.com/yannassoumou/open-kuroagent.git"
+$RepoUrl     = "https://github.com/yannassoumou/open-excel.git"
 
 # --- Interactive menu ---
 if ($Action -eq "") {

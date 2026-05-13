@@ -41,7 +41,7 @@ if (Test-Path $PackageJsonPath) {
     $CloneDir = Join-Path $env:USERPROFILE ".kuroagent"
     if (-not (Test-Path $CloneDir)) {
         Write-Step "Cloning repository ..."
-        git clone https://github.com/yannassoumou/kuroagent.git $CloneDir
+        git clone https://github.com/yannassoumou/open-excel.git $CloneDir
         Write-Success "Cloned to $CloneDir"
     } else {
         Write-Step "Repository already cloned, pulling latest ..."

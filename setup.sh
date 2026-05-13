@@ -2,7 +2,7 @@
 # setup.sh - Unified setup for kuroagent Excel Add-in
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/yannassoumou/open-kuroagent/master/setup.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/yannassoumou/open-excel/master/setup.sh | bash
 #   # OR from local:
 #   ./setup.sh              # Interactive menu
 #   ./setup.sh install      # First-time install
@@ -21,7 +21,7 @@ WHITE='\033[1;37m'
 NC='\033[0m'
 
 ADDIN_NAME="kuroagent"
-REPO_URL="https://github.com/yannassoumou/open-kuroagent.git"
+REPO_URL="https://github.com/yannassoumou/open-excel.git"
 INSTALL_DIR="$HOME/.kuroagent"
 ACTION="${1:-}"
 
@@ -239,7 +239,7 @@ do_uninstall() {
     echo -e "${GREEN}========================================${NC}"
     echo -e ""
     echo -e "  To reinstall:"
-    echo -e "    ${CYAN}curl -fsSL https://raw.githubusercontent.com/yannassoumou/open-kuroagent/master/setup.sh | bash${NC}"
+    echo -e "    ${CYAN}curl -fsSL https://raw.githubusercontent.com/yannassoumou/open-excel/master/setup.sh | bash${NC}"
     echo -e ""
 }
 

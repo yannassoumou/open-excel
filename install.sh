@@ -36,7 +36,7 @@ else
     CLONE_DIR="$HOME/.kuroagent"
     if [ ! -d "$CLONE_DIR" ]; then
         print_step "Cloning repository ..."
-        git clone https://github.com/yannassoumou/kuroagent.git "$CLONE_DIR"
+        git clone https://github.com/yannassoumou/open-excel.git "$CLONE_DIR"
         print_success "Cloned to $CLONE_DIR"
     else
         print_step "Repository already cloned, pulling latest ..."

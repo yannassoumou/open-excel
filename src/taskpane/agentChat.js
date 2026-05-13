@@ -1328,19 +1328,6 @@ export async function initAgentChat() {
       }
     }
 
-    // Preset models shown as fallback before API discovery
-    const PRESET_MODELS = [
-      "nvidia/nemotron-3-super-120b-a12b:free",
-      "openai/gpt-4",
-      "openai/gpt-4o",
-      "google/gemini-2.5-pro-preview-05-06",
-      "meta-llama/llama-3.3-70b-instruct",
-      "mistralai/mistral-large-2-instruct",
-      "deepseek/deepseek-chat",
-      "nousresearch/hermes-3-llama-3.1-70b",
-      "local-model",
-    ];
-
     async function discoverModels() {
       if (modelFetchAbort) {
         modelFetchAbort.abort();
@@ -1364,25 +1351,14 @@ export async function initAgentChat() {
         if (modelFetchAbort.signal.aborted) return;
 
         if (models.length > 0) {
-          // Build datalist: presets + discovered models (no duplicates)
+          // Build datalist from discovered models only
           const datalist = document.getElementById("model-suggestions");
           if (datalist) {
             datalist.innerHTML = "";
-
-            // Add presets first (only if not already in discovered models)
-            PRESET_MODELS.forEach((v) => {
-              const opt = document.createElement("option");
-              opt.value = v;
-              datalist.appendChild(opt);
-            });
-
-            // Add discovered models (avoid duplicates with presets)
             models.forEach((m) => {
-              if (!PRESET_MODELS.includes(m)) {
-                const opt = document.createElement("option");
-                opt.value = m;
-                datalist.appendChild(opt);
-              }
+              const opt = document.createElement("option");
+              opt.value = m;
+              datalist.appendChild(opt);
             });
 
             showModelCount(models.length);
@@ -1693,6 +1669,9 @@ async function handleSend() {
   const stopButton = document.getElementById("chat-stop");
   if (sendButton) sendButton.disabled = true;
 
+  // Declare stream before the try block so catch/finally can access it
+  let stream = null;
+
   try {
     if (stopButton) stopButton.style.display = "inline-block";
 
@@ -1713,7 +1692,7 @@ async function handleSend() {
       apiMessages.length
     );
 
-    const stream = appendStreamingMessage();
+    stream = appendStreamingMessage();
     let planResponse = "";
 
     try {
@@ -1730,12 +1709,12 @@ async function handleSend() {
         }
       );
     } catch (error) {
-      stream.element.remove();
+      stream?.element?.remove();
       appendMessage("agent", `Error: ${error.message || String(error)}`);
       return;
     }
 
-    if (!planResponse && !stream.element.querySelector(".agent-bubble").innerHTML) {
+    if (!planResponse && stream?.element && !stream.element.querySelector(".agent-bubble").innerHTML) {
       stream.element.remove();
       if (isStopped) {
         appendMessage("agent", "⏹ Execution stopped.");
