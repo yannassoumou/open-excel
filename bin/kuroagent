@@ -134,7 +134,7 @@ async function main() {
     return;
   }
 
-  // Linux/Mac: start webpack ourselves + print instructions
+  // Linux/Mac: start webpack ourselves + use office-addin-debugging for sideloading
   const serverRunning = await isServerRunning();
   if (serverRunning) {
     log(`Dev server already running at ${DEV_URL}`);
@@ -146,14 +146,38 @@ async function main() {
   log(`Dev server ready at ${DEV_URL}`);
 
   if (!noOpen) {
-    if (platform === "darwin" && openFile) {
-      let absPath = path.resolve(originalCwd, openFile);
-      if (!fs.existsSync(absPath)) absPath = path.resolve(repoDir, openFile);
-      if (fs.existsSync(absPath)) {
-        log(`Opening workbook in Excel: ${absPath}`);
-        try { execSync(`open -a "Microsoft Excel" "${absPath}"`, { stdio: "pipe" }); } catch {}
-      } else {
-        log(`[!] File not found: ${openFile}`);
+    // macOS: use office-addin-debugging to launch Excel with add-in sideloaded
+    if (platform === "darwin") {
+      try {
+        let cmd = `npx office-addin-debugging start "${manifestPath}" desktop`;
+        if (openFile) {
+          let absPath = path.resolve(originalCwd, openFile);
+          if (!fs.existsSync(absPath)) absPath = path.resolve(repoDir, openFile);
+          if (fs.existsSync(absPath)) {
+            log(`Workbook: ${absPath}`);
+            cmd += ` --document "${absPath}"`;
+          } else {
+            log(`[!] File not found: ${openFile}, launching without workbook`);
+          }
+        }
+        log(`Sideload dev server and launch Excel with add-in pre-loaded.`);
+        log(`When done, quit Excel to close the process.`);
+        execSync(cmd, { cwd: repoDir, stdio: "inherit", shell: true });
+        return;
+      } catch (err) {
+        log(`[!!] office-addin-debugging failed: ${err.message}`);
+      }
+    } else {
+      // Linux: open workbook in Excel Desktop if available
+      if (openFile) {
+        let absPath = path.resolve(originalCwd, openFile);
+        if (!fs.existsSync(absPath)) absPath = path.resolve(repoDir, openFile);
+        if (fs.existsSync(absPath)) {
+          log(`Opening workbook in Excel: ${absPath}`);
+          try { execSync(`open -a "Microsoft Excel" "${absPath}"`, { stdio: "pipe" }); } catch {}
+        } else {
+          log(`[!] File not found: ${openFile}`);
+        }
       }
     }
     printSideloadingInstructions(manifestPath, platform === "linux" || !openFile);
