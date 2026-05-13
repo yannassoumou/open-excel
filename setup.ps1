@@ -63,29 +63,58 @@ if ($Action -eq "") {
 function Do-Install {
     Write-Step "Installing $AddInName"
 
-    if (Test-Path $InstallDir) {
+    if (Test-Path (Join-Path $InstallDir ".git")) {
         Write-Step "Repository already exists at $InstallDir"
-        Write-Step "Pulling latest changes ..."
         Set-Location $InstallDir
-        # Check for unstaged changes that would block pull
-        $hasChanges = & git status --porcelain 2>&1 | Where-Object { $_ -ne '' }
-        if ($hasChanges) {
-            Write-Info "Local changes detected, stashing before pull"
-            git stash --include-untracked 2>&1 | Out-Null
-        }
-        $pullOut = & git pull origin master 2>&1
-        if ($LASTEXITCODE -ne 0) {
-            # If pull failed (conflict), force reset to remote
-            Write-Info "Pull returned errors, resetting to remote"
-            git fetch origin master 2>&1 | Out-Null
-            git reset --hard FETCH_HEAD 2>&1 | Out-Null
-        }
-        Write-Success "Repository updated"
 
-        # Force re-link: unlink old, link new
+        # Try a clean pull -- if it fails, nuke and re-clone
+        $pullOk = $true
+        $pullOut = & git fetch origin master 2>&1
+        if ($LASTEXITCODE -eq 0) {
+            $local  = & git rev-parse HEAD 2>$null
+            $remote = & git rev-parse FETCH_HEAD 2>$null
+            if ($local -ne $remote) {
+                & git stash --include-untracked 2>&1 | Out-Null
+                & git reset --hard FETCH_HEAD 2>&1 | Out-Null
+                Write-Success "Pulled latest"
+            } else {
+                Write-Success "Already up to date"
+            }
+        } else {
+            Write-Info "Pull failed, doing a clean reinstall"
+            Set-Location $env:USERPROFILE
+            & cmd /c "rmdir /s /q `"$InstallDir`"" 2>&1 | Out-Null
+            if (Test-Path $InstallDir) {
+                Remove-Item -Path $InstallDir -Recurse -Force -ErrorAction SilentlyContinue
+            }
+            $pullOk = $false
+        }
+
+        if (-not $pullOk -or -not (Test-Path (Join-Path $InstallDir "package.json"))) {
+            Write-Step "Re-cloning repository ..."
+            if (Test-Path $InstallDir) {
+                Remove-Item -Path $InstallDir -Recurse -Force -ErrorAction SilentlyContinue
+            }
+            git clone $RepoUrl $InstallDir 2>&1 | Out-Null
+            if (-not (Test-Path $InstallDir)) {
+                Write-Error-C "Clone failed. Make sure git is installed and the repo is accessible."
+                Write-Info "Install git: https://git-scm.com/download/win"
+                exit 1
+            }
+            Write-Success "Cloned to $InstallDir"
+        }
+
+        Set-Location $InstallDir
+
+        # Force re-link so we pick up the latest bin/kuroagent
         Write-Step "Refreshing global CLI link"
         & npm uninstall -g excel-custom-functions-js 2>&1 | Out-Null
     } else {
+        # Clean up any leftover stub directory so clone works
+        if (Test-Path $InstallDir) {
+            Set-Location $env:USERPROFILE
+            Remove-Item -Path $InstallDir -Recurse -Force -ErrorAction SilentlyContinue
+        }
         Write-Step "Cloning repository ..."
         git clone $RepoUrl $InstallDir 2>&1 | Out-Null
         if (-not (Test-Path $InstallDir)) {
