@@ -44,17 +44,17 @@ npm link
 
 ## Developer CLI
 
-After install, the `excel` CLI replaces `npm run dev-server`:
+After install, the `kuroagent` CLI replaces `npm run dev-server`:
 
 ```bash
-excel                          # Start dev server + sideload taskpane
-excel -m path/to/manifest.xml  # Use a custom manifest
-excel --no-open                # Server only
-excel --stop                   # Stop dev server on port 3000
-excel --help                   # Full help
+kuroagent                          # Start dev server + sideload taskpane
+kuroagent -m path/to/manifest.xml  # Use a custom manifest
+kuroagent --no-open                # Server only
+kuroagent --stop                   # Stop dev server on port 3000
+kuroagent --help                   # Full help
 ```
 
-The CLI starts the webpack server on `https://localhost:3000`, waits until it is ready, then opens Excel with the add-in sideloaded. Keep the terminal open for live reloading.
+The CLI starts the webpack server on `https://localhost:3000`, waits until it is ready, then opens Excel Desktop (Windows) or your default browser (Mac/Linux) with the add-in sideloaded. Keep the terminal open for live reloading.
 
 ## Configuration
 
@@ -121,7 +121,6 @@ npm run dev-server       # webpack dev server on https://localhost:3000
 npm run start            # build + launch Excel Desktop (Windows)
 npm run start:web        # build + launch in browser
 npm run lint             # ESLint check
-npm run test             # run tests
 npm run validate         # validate manifest.xml
 ```
 
