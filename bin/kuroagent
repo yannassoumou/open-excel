@@ -34,22 +34,24 @@ const originalCwd = process.cwd();
 function findProjectRoot() {
   // 1. EXCEL_HOME env var
   const envHome = process.env.EXCEL_HOME;
-  if (envHome && fs.existsSync(path.join(envHome, "manifest.xml"))) {
-    return path.resolve(envHome);
+  if (envHome) {
+    if (fs.existsSync(path.join(envHome, "manifest.xml"))) return path.resolve(envHome);
+    if (fs.existsSync(path.join(envHome, "manifest.dev.xml"))) return path.resolve(envHome);
   }
 
   // 2. ~/.kuroagent / %USERPROFILE%.kuroagent
   const homeDir = process.env.USERPROFILE || process.env.HOME || os.homedir();
   if (homeDir) {
     const kuroagent = path.join(homeDir, ".kuroagent");
-    if (fs.existsSync(path.join(kuroagent, "manifest.xml"))) {
-      return kuroagent;
-    }
+    if (fs.existsSync(path.join(kuroagent, "manifest.xml"))) return kuroagent;
+    if (fs.existsSync(path.join(kuroagent, "manifest.dev.xml"))) return kuroagent;
   }
 
   // 3. walk up from cwd
   let dir = process.cwd();
   for (let i = 0; i < 20; i++) {
+    if (fs.existsSync(path.join(dir, "manifest.xml"))) return dir;
+    if (fs.existsSync(path.join(dir, "manifest.dev.xml"))) return dir;
     const pkg = path.join(dir, "package.json");
     if (fs.existsSync(pkg)) {
       try {
@@ -62,7 +64,6 @@ function findProjectRoot() {
         }
       } catch {}
     }
-    if (fs.existsSync(path.join(dir, "manifest.xml"))) return dir;
     const parent = path.dirname(dir);
     if (parent === dir) break;
     dir = parent;
@@ -71,6 +72,9 @@ function findProjectRoot() {
   // 4. parent directory of this script
   const candidate = path.resolve(cliDir, "..");
   if (fs.existsSync(path.join(candidate, "manifest.xml"))) return candidate;
+  if (fs.existsSync(path.join(candidate, "manifest.dev.xml"))) return candidate;
+  // 5. fallback: if this bin/ is inside .kuroagent
+  if (candidate.endsWith(".kuroagent") || path.basename(path.dirname(candidate)) === ".kuroagent") return candidate;
 
   return null;
 }
