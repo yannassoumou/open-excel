@@ -73,7 +73,7 @@ const defaultManifest = path.join(repoDir, "manifest.xml");
 // --- arg parsing ---
 const args = process.argv.slice(2);
 const positional = args.filter((a) => !a.startsWith("-"));
-const openFile = positional[0];
+const openFile = positional[0] || readFlag(args, ["--file", "-f"]);
 const helpFlag = args.includes("--help") || args.includes("-h");
 const versionFlag = args.includes("--version");
 const stopFlag = args.includes("--stop");
@@ -111,14 +111,15 @@ async function main() {
 
   if (!noOpen) {
     if (platform === "win32") {
-      windowsSideload(manifestPath);
+      windowsSideload(manifestPath, openFile);
     } else {
       printSideloadingInstructions(manifestPath, "Linux");
     }
 
-    if (openFile) {
-      const absPath = path.resolve(openFile);
-      log(`Workbook: ${absPath}`);
+    if (!openFile) {
+      log(`\nTo open a workbook:`);
+      log(`  excel path/to/workbook.xlsx`);
+      log(`  excel -f path/to/workbook.xlsx`);
     }
   } else {
     log(`--no-open: dev server running, skipping sideload.`);
@@ -222,24 +223,46 @@ function stopServer() {
 
 // --- platform sideload ---
 
-function windowsSideload(manifest) {
-  log(`Opening Excel with registered add-in ...`);
+function windowsSideload(manifest, workbookPath) {
+  log(`Opening Excel (registry sideload already configured by install.ps1) ...`);
   try {
-    execSync(`npx office-addin-debugging start ${HOST_NAME} --manifest "${manifest}"`, {
-      cwd: repoDir,
-      stdio: "inherit",
-    });
-  } catch {
-    log(`[!] office-addin-debugging failed, trying registry fallback ...`);
-    try {
-      execSync(`npx office-addin-dev-settings register "${manifest}"`, {
-        cwd: repoDir,
-        stdio: "inherit",
-      });
-    } catch {
-      log(`[!!] Could not register automatically.`);
-      log(`    Sideload manually: Add-ins -> Custom Add-ins -> ${manifest}`);
+    // Find Excel.exe — it lives in Program Files or Program Files (x86)
+    const paths = [
+      "C:\\Program Files\\Microsoft Office\\root\\Office16\\EXCEL.EXE",
+      "C:\\Program Files (x86)\\Microsoft Office\\root\\Office16\\EXCEL.EXE",
+      "C:\\Program Files\\Microsoft Office\\Office16\\EXCEL.EXE",
+    ];
+    let excelExe = null;
+    for (const p of paths) {
+      if (fs.existsSync(p)) { excelExe = p; break; }
     }
+
+    const args = [];
+    if (workbookPath) {
+      const absPath = path.resolve(workbookPath);
+      if (!fs.existsSync(absPath)) {
+        log(`[!] File not found: ${absPath}`);
+      } else {
+        args.push(`"${absPath}"`);
+        log(`Workbook: ${absPath}`);
+      }
+    }
+
+    if (!excelExe) {
+      // Try via start command (asks Windows to find Excel)
+      if (args.length > 0) {
+        execSync(`start excel.exe ${args.join(" ")}`, { shell: true });
+      } else {
+        execSync(`start excel.exe`, { shell: true });
+      }
+      log(`Excel opened. The add-in should appear if registry sideload is configured.`);
+    } else {
+      spawn(JSON.stringify(excelExe), args, { detached: true, stdio: "ignore", shell: true });
+      log(`Excel opened via registry sideload.`);
+    }
+  } catch (err) {
+    log(`[!!] Could not open Excel automatically.`);
+    log(`    Please sideload manually: Add-ins -> Custom Add-ins -> ${manifest}`);
   }
 }
 
