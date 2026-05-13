@@ -137,9 +137,7 @@ async function main() {
   // macOS: start webpack + register manifest in Safari + open Excel
   if (platform === "darwin") {
     const serverRunning = await isServerRunning();
-    if (serverRunning) {
-      log(`Dev server already running at ${DEV_URL}`);
-    } else {
+    if (!serverRunning) {
       log(`Starting dev server ...`);
       await startDevServer();
     }
@@ -147,18 +145,17 @@ async function main() {
     log(`Dev server ready at ${DEV_URL}`);
 
     if (!noOpen) {
-      // Register the dev manifest in Safari (required for Mac sideloading)
-      log(`Registering add-in manifest ...`);
-      try {
-        execSync(`open "${DEV_URL}/manifest.dev.xml"`, { stdio: "pipe" });
-      } catch {}
+      // On Mac: opening the manifest URL in Safari registers it with Excel.
+      // After first registration, Excel auto-loads the add-in on each launch.
+      log(`Registering add-in manifest in Safari ...`);
+      try { execSync(`open "${DEV_URL}/manifest.dev.xml"`, { stdio: "pipe" }); } catch {}
+      await new Promise(r => setTimeout(r, 2000));
 
-      // Open workbook if provided
       if (openFile) {
         let absPath = path.resolve(originalCwd, openFile);
         if (!fs.existsSync(absPath)) absPath = path.resolve(repoDir, openFile);
         if (fs.existsSync(absPath)) {
-          log(`Opening workbook: ${absPath}`);
+          log(`Opening workbook in Excel: ${absPath}`);
           try { execSync(`open -a "Microsoft Excel" "${absPath}"`, { stdio: "pipe" }); } catch {}
         } else {
           log(`[!] File not found: ${openFile}`);
@@ -167,11 +164,26 @@ async function main() {
         log(`Opening Excel ...`);
         try { execSync(`open -a "Microsoft Excel"`, { stdio: "pipe" }); } catch {}
       }
+      log(`On first run, the add-in panel appears after you accept it in Safari.`);
+      log(`After first registration, it auto-loads on every launch.`);
     }
     return;
   }
 
   // Linux: start webpack + print instructions
+  if (noOpen) {
+    log(`Starting dev server ...`);
+    const serverRunning = await isServerRunning();
+    if (!serverRunning) {
+      await startDevServer();
+    }
+    await waitForServer();
+    log(`Dev server ready at ${DEV_URL}`);
+    log(`\nKeep this terminal open for live reloading.`);
+    log(`To stop:  kuroagent --stop`);
+    return;
+  }
+
   const serverRunning = await isServerRunning();
   if (serverRunning) {
     log(`Dev server already running at ${DEV_URL}`);
@@ -197,6 +209,8 @@ async function main() {
       log(`  kuroagent -f path/to/workbook.xlsx`);
     }
   }
+
+  log(`\nKeep this terminal open for live reloading.`);
   log(`To stop:  kuroagent --stop`);
 }
 
