@@ -146,7 +146,6 @@ async function main() {
   log(`Dev server ready at ${DEV_URL}`);
 
   if (!noOpen) {
-    // On macOS, try to open the workbook directly in Excel Desktop
     if (platform === "darwin" && openFile) {
       let absPath = path.resolve(originalCwd, openFile);
       if (!fs.existsSync(absPath)) absPath = path.resolve(repoDir, openFile);
@@ -157,7 +156,7 @@ async function main() {
         log(`[!] File not found: ${openFile}`);
       }
     }
-    printSideloadingInstructions(manifestPath);
+    printSideloadingInstructions(manifestPath, platform === "linux" || !openFile);
     if (!openFile) {
       log(`To open a workbook:`);
       log(`  kuroagent -f path/to/workbook.xlsx`);
@@ -337,7 +336,7 @@ function windowsSideload(manifest, workbookPath) {
   }
 }
 
-function printSideloadingInstructions(manifest) {
+function printSideloadingInstructions(manifest, openBrowser = true) {
   const manifestUrl = manifest.startsWith("http") ? manifest : `file://${manifest}`;
   log(`Add-in dev server running at ${DEV_URL}`);
   log(`Option 1 - Excel Online:`);
@@ -350,8 +349,10 @@ function printSideloadingInstructions(manifest) {
   log(`  2. Insert -> Get Add-ins -> Custom Add-ins`);
   log(`  3. Load manifest: ${manifest}`);
   try {
-    if (process.platform === "darwin") execSync(`open "https://excel.office.com" 2>/dev/null || true`);
-    else if (process.platform === "linux") execSync(`xdg-open "https://excel.office.com" 2>/dev/null || true`);
+    if (openBrowser) {
+      if (process.platform === "darwin") execSync(`open "https://excel.office.com" 2>/dev/null || true`);
+      else if (process.platform === "linux") execSync(`xdg-open "https://excel.office.com" 2>/dev/null || true`);
+    }
   } catch {}
 }
 
