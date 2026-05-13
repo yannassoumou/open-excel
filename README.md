@@ -13,17 +13,24 @@ Office Add-in for Excel with AI chat — local development package.
 ### Windows
 
 ```powershell
-iwr https://raw.githubusercontent.com/yannassoumou/open-excel/master/install.ps1 -OutFile install.ps1
-powershell -ExecutionPolicy Bypass -File .\install.ps1
+iwr https://raw.githubusercontent.com/yannassoumou/open-excel/master/setup.ps1 -OutFile setup.ps1
+powershell -ExecutionPolicy Bypass -File .\setup.ps1
 ```
 
 ### Linux / macOS
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/yannassoumou/open-excel/master/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/yannassoumou/open-excel/master/setup.sh | bash
 ```
 
-Both scripts install dependencies, generate HTTPS dev certs, and put the `excel` CLI on your PATH.
+Both offer an interactive menu with **install**, **update**, **uninstall**, and **purge** options, or pass the action directly:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\setup.ps1 install
+powershell -ExecutionPolicy Bypass -File .\setup.ps1 update
+powershell -ExecutionPolicy Bypass -File .\setup.ps1 uninstall
+powershell -ExecutionPolicy Bypass -File .\setup.ps1 purge
+```
 
 ### Manual Setup
 
@@ -120,18 +127,17 @@ npm run validate         # validate manifest.xml
 
 ## Uninstall
 
-### Windows
+Use the same setup script:
 
 ```powershell
-iwr https://raw.githubusercontent.com/yannassoumou/open-excel/master/uninstall.ps1 -OutFile uninstall.ps1
-powershell -ExecutionPolicy Bypass -File .\uninstall.ps1
+powershell -ExecutionPolicy Bypass -File .\setup.ps1 uninstall
 ```
-
-### Linux / macOS
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/yannassoumou/open-excel/master/uninstall.sh | bash
+curl -fsSL https://raw.githubusercontent.com/yannassoumou/open-excel/master/setup.sh | bash -s -- uninstall
 ```
+
+Use `purge` instead of `uninstall` to delete the `.kuroagent` directory too.
 
 ## License
 
