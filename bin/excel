@@ -169,6 +169,7 @@ async function startDevServer() {
     const child = spawn("npx", ["webpack", "serve", "--mode", "development"], {
       cwd: repoDir,
       stdio: "inherit",
+      shell: true,
       env: { ...process.env, PORT: String(PORT) },
     });
 
