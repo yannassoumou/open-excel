@@ -95,6 +95,17 @@ if (!fs.existsSync(manifestPath)) {
 
 // --- main ---
 async function main() {
+  const platform = process.platform;
+
+  // On Windows, office-addin-debugging start handles BOTH the dev server
+  // AND the sideloading. If we start webpack ourselves first, the SDK
+  // will fail to bind port 3000 and shut down.
+  if (platform === "win32") {
+    windowsSideload(manifestPath, openFile);
+    return;
+  }
+
+  // Linux/Mac: start webpack ourselves + print sideloading instructions
   const serverRunning = await isServerRunning();
 
   if (serverRunning) {
@@ -107,14 +118,8 @@ async function main() {
   await waitForServer();
   log(`Dev server ready at ${DEV_URL}`);
 
-  const platform = process.platform;
-
   if (!noOpen) {
-    if (platform === "win32") {
-      windowsSideload(manifestPath, openFile);
-    } else {
-      printSideloadingInstructions(manifestPath, "Linux");
-    }
+    printSideloadingInstructions(manifestPath, "Linux");
 
     if (!openFile) {
       log(`\nTo open a workbook:`);
