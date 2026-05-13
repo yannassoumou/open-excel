@@ -35,7 +35,7 @@ $AddInName   = "kuroagent"
 $Guid        = "14254940-5dfe-46ec-b860-a8291f526990"
 $RegPath     = "HKCU:\Software\Microsoft\Office\Excel\Addins\$Guid"
 $InstallDir  = Join-Path $env:USERPROFILE ".kuroagent"
-$RepoUrl     = "https://github.com/yannassoumou/open-excel.git"
+$RepoUrl     = "https://github.com/yannassoumou/open-kuroagent.git"
 
 # --- Interactive menu ---
 if ($Action -eq "") {
@@ -63,65 +63,15 @@ if ($Action -eq "") {
 function Do-Install {
     Write-Step "Installing $AddInName"
 
-    if (Test-Path (Join-Path $InstallDir ".git")) {
+    if (Test-Path $InstallDir) {
         Write-Step "Repository already exists at $InstallDir"
+        Write-Step "Pulling latest changes ..."
         Set-Location $InstallDir
-
-        # Try a clean pull -- if it fails, nuke and re-clone
-        $pullOk = $true
-        $pullOut = & git fetch origin master 2>&1
-        if ($LASTEXITCODE -eq 0) {
-            $local  = & git rev-parse HEAD 2>$null
-            $remote = & git rev-parse FETCH_HEAD 2>$null
-            if ($local -ne $remote) {
-                & git stash --include-untracked 2>&1 | Out-Null
-                & git reset --hard FETCH_HEAD 2>&1 | Out-Null
-                Write-Success "Pulled latest"
-            } else {
-                Write-Success "Already up to date"
-            }
-        } else {
-            Write-Info "Pull failed, doing a clean reinstall"
-            Set-Location $env:USERPROFILE
-            & cmd /c "rmdir /s /q `"$InstallDir`"" 2>&1 | Out-Null
-            if (Test-Path $InstallDir) {
-                Remove-Item -Path $InstallDir -Recurse -Force -ErrorAction SilentlyContinue
-            }
-            $pullOk = $false
-        }
-
-        if (-not $pullOk -or -not (Test-Path (Join-Path $InstallDir "package.json"))) {
-            Write-Step "Re-cloning repository ..."
-            if (Test-Path $InstallDir) {
-                Remove-Item -Path $InstallDir -Recurse -Force -ErrorAction SilentlyContinue
-            }
-            git clone $RepoUrl $InstallDir 2>&1 | Out-Null
-            if (-not (Test-Path $InstallDir)) {
-                Write-Error-C "Clone failed. Make sure git is installed and the repo is accessible."
-                Write-Info "Install git: https://git-scm.com/download/win"
-                exit 1
-            }
-            Write-Success "Cloned to $InstallDir"
-        }
-
-        Set-Location $InstallDir
-
-        # Force re-link so we pick up the latest bin/kuroagent
-        Write-Step "Refreshing global CLI link"
-        & npm uninstall -g excel-custom-functions-js 2>&1 | Out-Null
+        git pull origin master 2>&1 | Out-Null
+        Write-Success "Repository updated"
     } else {
-        # Clean up any leftover stub directory so clone works
-        if (Test-Path $InstallDir) {
-            Set-Location $env:USERPROFILE
-            Remove-Item -Path $InstallDir -Recurse -Force -ErrorAction SilentlyContinue
-        }
         Write-Step "Cloning repository ..."
         git clone $RepoUrl $InstallDir 2>&1 | Out-Null
-        if (-not (Test-Path $InstallDir)) {
-            Write-Error-C "Clone failed. Make sure git is installed and the repo is accessible."
-            Write-Info "Install git: https://git-scm.com/download/win"
-            exit 1
-        }
         Write-Success "Cloned to $InstallDir"
         Set-Location $InstallDir
     }
@@ -150,21 +100,16 @@ function Do-Install {
 
     # Install dependencies
     Write-Step "Installing npm dependencies"
-    $npmResult = & npm install --no-audit --no-fund --loglevel=error 2>&1
-    if ($LASTEXITCODE -ne 0) {
-        Write-Error-C "npm install failed"
-        $npmResult | ForEach-Object { Write-Info $_ }
-        exit 1
-    }
+    & npm install --no-audit --no-fund --loglevel=error | Out-Null
     Write-Success "Dependencies installed"
 
     # Dev certs
     Write-Step "Installing dev certificates"
-    $certResult = & npx office-addin-dev-certs install --machine 2>&1
-    if ($LASTEXITCODE -eq 0) {
+    try {
+        & npx office-addin-dev-certs install --machine 2>$null | Out-Null
         Write-Success "Dev certificates installed"
-    } else {
-        Write-Warning-C "Dev certs: already installed or non-zero exit"
+    } catch {
+        Write-Warning-C "Dev certs step returned non-zero (may already be installed)"
     }
 
     # Register CLI
