@@ -134,39 +134,9 @@ async function main() {
     return;
   }
 
-  // macOS: start webpack + register manifest in Safari + open Excel
+  // macOS: office-addin-debugging handles server + sideload together (same as Windows)
   if (platform === "darwin") {
-    const serverRunning = await isServerRunning();
-    if (!serverRunning) {
-      log(`Starting dev server ...`);
-      await startDevServer();
-    }
-    await waitForServer();
-    log(`Dev server ready at ${DEV_URL}`);
-
-    if (!noOpen) {
-      // On Mac: opening the manifest URL in Safari registers it with Excel.
-      // After first registration, Excel auto-loads the add-in on each launch.
-      log(`Registering add-in manifest in Safari ...`);
-      try { execSync(`open "${DEV_URL}/manifest.dev.xml"`, { stdio: "pipe" }); } catch {}
-      await new Promise(r => setTimeout(r, 2000));
-
-      if (openFile) {
-        let absPath = path.resolve(originalCwd, openFile);
-        if (!fs.existsSync(absPath)) absPath = path.resolve(repoDir, openFile);
-        if (fs.existsSync(absPath)) {
-          log(`Opening workbook in Excel: ${absPath}`);
-          try { execSync(`open -a "Microsoft Excel" "${absPath}"`, { stdio: "pipe" }); } catch {}
-        } else {
-          log(`[!] File not found: ${openFile}`);
-        }
-      } else {
-        log(`Opening Excel ...`);
-        try { execSync(`open -a "Microsoft Excel"`, { stdio: "pipe" }); } catch {}
-      }
-      log(`On first run, the add-in panel appears after you accept it in Safari.`);
-      log(`After first registration, it auto-loads on every launch.`);
-    }
+    macOSSideload(manifestPath, openFile);
     return;
   }
 
@@ -359,6 +329,31 @@ function stopServer() {
 
 // === PLATFORM SIDELOAD ===
 function windowsSideload(manifest, workbookPath) {
+  log(`Starting ${ADDIN_NAME} (dev server + Excel) ...`);
+  try {
+    let cmd;
+    const manifestFile = `"${manifest}"`;
+    if (workbookPath) {
+      let absPath = path.resolve(originalCwd, workbookPath);
+      if (!fs.existsSync(absPath)) absPath = path.resolve(repoDir, workbookPath);
+      if (fs.existsSync(absPath)) {
+        log(`Workbook: ${absPath}`);
+        cmd = `npx office-addin-debugging start ${manifestFile} desktop --document "${absPath}"`;
+      } else {
+        log(`[!] File not found: ${absPath}, launching without workbook`);
+        cmd = `npx office-addin-debugging start ${manifestFile} desktop`;
+      }
+    } else {
+      cmd = `npx office-addin-debugging start ${manifestFile} desktop`;
+    }
+    execSync(cmd, { cwd: repoDir, stdio: "inherit", shell: true });
+  } catch (err) {
+    log(`[!!] Could not launch Excel: ${err.message}`);
+    log(`    Please sideload manually: Add-ins -> Custom Add-ins -> ${manifest}`);
+  }
+}
+
+function macOSSideload(manifest, workbookPath) {
   log(`Starting ${ADDIN_NAME} (dev server + Excel) ...`);
   try {
     let cmd;

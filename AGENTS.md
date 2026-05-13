@@ -1,93 +1,108 @@
 # AGENTS.md
 
-## Project
+Office Add-in for Excel (KuroAgent) — AI chat task pane + custom functions. Built on the Microsoft Office Add-in template.
 
-Office Add-in for Excel — custom functions + task pane UI. JavaScript (ES5 via Babel), not TypeScript despite `tsconfig.json`.
+## Project Structure
+
+```
+src/
+  functions/functions.js   — Excel custom functions (=KUROAGENT(...))
+  taskpane/taskpane.js     — Task pane entry (Office.onReady → Excel.run)
+  taskpane/agentChat.js    — Orchestrator + execution loop
+  taskpane/agent/          — AI: ai.js (SSE streaming), parser.js (JSON extraction + repair),
+                           — operations.js (60+ operation registry), prompts.js
+  taskpane/excel/          — context.js, snapshot.js
+  taskpane/ui/             — chat.js, config.js, paste.js
+  taskpane/ppt/            — PowerPoint support (in development)
+  commands/commands.js     — Ribbon button handler
+```
+
+**Build output:** `dist/` — served by webpack dev server on HTTPS `localhost:3000`.
 
 **Three entry points:**
 - `src/functions/functions.js` — Custom Excel functions (must use `@customfunction` JSDoc tag)
 - `src/taskpane/taskpane.js` — Task pane (Excel API via `Office.onReady()` → `Excel.run()`)
 - `src/commands/commands.js` — Ribbon button handler
 
-**Build output:** `dist/` (served by webpack dev server on HTTPS `localhost:3000`)
-
 ## Commands
 
 ```bash
 npm install
 npm run dev-server        # webpack dev server (HTTPS, localhost:3000)
-npm run build             # production build
+npm run build             # production build to dist/
 npm run build:dev         # dev build with source maps
 npm run watch             # rebuild on changes
-npm run start             # build + launch Excel Desktop for debugging
+npm run start             # build + launch Excel Desktop (Windows) — runs prestart hook
+npm run start:web         # build + launch in browser
 npm run stop              # stop debugging session
-npm run start:web         # debug in Excel on the web
 npm run lint              # office-addin-lint check
 npm run lint:fix          # auto-fix lint issues
 npm run validate          # validate manifest.xml
+npm run test              # node --test tests/**/*.test.js
+npm run test:watch        # watch mode for tests
 ```
 
-## Dev Prerequisites
+## Dev CLI
 
-- `office-addin-dev-certs` — generate with `office-addin-dev-certs install` (certs in `~/.office-addin-dev-certs/`)
-- ngrok (for Excel on the web): `ngrok http https://localhost:3000`
-- After ngrok starts, update all URLs in `manifest.xml` to the ngrok URL
+After `npm link`, the `kuroagent` CLI replaces manual dev-server management:
+
+```bash
+kuroagent                          # Start dev server + sideload taskpane
+kuroagent file.xlsx                # Start + open specified workbook
+kuroagent -m manifest.xml          # Use a custom manifest
+kuroagent --no-open                # Server only, don't open Excel
+kuroagent --stop                   # Kill dev server on port 3000
+kuroagent --update                 # Pull latest from GitHub, reinstall deps, relink CLI
+kuroagent --install                # (Re)install Node dependencies (from any directory)
+```
+
+The CLI auto-discovers the project root (checks `EXCEL_HOME` env, `~/.kuroagent`, walks up from cwd, or parent of `bin/kuroagent`).
+
+## Configuration
+
+LLM settings are configured in the KuroAgent panel UI (Add-ins tab):
+
+| Setting | Description | Default |
+|---------|-------------|---------|
+| Endpoint | LLM API URL | `https://openrouter.ai/api/v1/chat/completions` |
+| Model | Model name | `gpt-4` |
+| API Key | Bearer token (empty for local LLMs) | — |
+
+Local LLM endpoints: Ollama `:11434`, LM Studio `:1234`, llama.cpp `:8082`, vLLM `:8000`. Any OpenAI-compatible `/v1/chat/completions` works.
+
+Tailscale remote LLM: `tailscale serve --bg --https=443 http://localhost:8082`, then set endpoint to `https://<machine>.ts.net/v1/chat/completions`.
 
 ## Gotchas
 
-- **No tests.** `office-addin-lint` is the only automated check (lint + prettier). For spreadsheet content, write a `verify.js` script using `xlsx` to programmatically assert cell values and formulas — never claim success based on source code alone.
-- **Source is JavaScript**, not TypeScript. `tsconfig.json` is only for `@types/office-js` resolution.
-- `npm run start` has a `prestart` hook that runs `npm run build` first.
-- Production build swaps `https://localhost:3000` → `urlProd` (set in `webpack.config.js:11`).
-- Custom functions namespace is `CONTOSO` (in `manifest.xml`).
-- `manifest_dev.xml` exists for web debugging with a pre-configured OneDrive doc URL.
-- `opencode.jsonc` contains provider config with API keys — never commit changes to it.
-- Prettier uses `office-addin-prettier-config` (invoked via `npm run prettier`).
-- VS Code tasks in `.vscode/tasks.json` mirror the npm scripts.
-- **Agents cannot visually inspect Excel files.** Reading a `.xlsx` with the `xlsx` library only gives raw cell data — formulas, error codes, and formatting are invisible to "eyes". Always use programmatic assertions in a `verify.js` script to prove correctness.
+- **Source is JavaScript, not TypeScript.** `tsconfig.json` is only for `@types/office-js` resolution. `package.json` has `"type": "module"` (ESM) — source files use `import`/`export`.
+- **`manifest.xml` does NOT exist.** Active manifests are `manifest.dev.xml` (Excel) and `manifest.ppt.xml` (PowerPoint, in development). The CLI falls back to `manifest.dev.xml` when `manifest.xml` is absent.
+- **Custom functions namespace is `KUROAGENT`** (not `CONTOSO`). Set in `manifest.dev.xml` `<bt:String id="Functions.Namespace">`.
+- **`npm run start` has a `prestart` hook** that runs `npm run build` first.
+- **Webpack config is CJS** (`webpack.config.cjs`) despite ESM source. Entry paths reference `./src/...` files.
+- **Production build** swaps `https://localhost:3000/` → `urlProd` in `webpack.config.cjs:11-13` (resolves from `VERCEL_URL` env var, falls back to `https://excel-ten-theta.vercel.app/`).
+- **`opencode.jsonc`** contains API keys — never commit changes to it. It's in `.npmignore`.
+- **Prettier** uses `office-addin-prettier-config` (invoked via `npm run prettier`).
+- **ESLint** extends `plugin:office-addins/recommended` (`.eslintrc.json`).
+- **Babel** transpiles to ES5 for IE 11 compatibility (`babel.config.json` + `core-js`/`regenerator-runtime` polyfills).
 
-## Vercel Deployment
+## Tests
 
-This project can be deployed to Vercel as a static site. The `dist/` folder contains all files needed by the Office Add-in.
-
-### Setup
+Tests exist for the parser/operations layer:
 
 ```bash
-npm i -g vercel
-vercel login
-vercel link              # connect to Vercel project
-vercel deploy           # preview deployment
-vercel --prod           # production deployment
+npm run test        # Run all tests: tests/operations.test.js
+npm run test:watch  # Watch mode
 ```
 
-### Configuration
+Test scope: `parser.js` (JSON extraction from LLM responses), `operations.js` (operation validation against registry), and mock Excel execution tracking. Tests do NOT cover the task pane UI, custom functions, or actual Excel API calls.
 
-- `vercel.json` — build config (`npm run build` → `dist/`), rewrites for Office Add-in HTML entry points, CSP headers
-- `webpack.config.js:11` — `urlProd` auto-resolves from `VERCEL_URL` env var on Vercel; falls back to `https://www.contoso.com/`
-- `.vercelignore` — excludes source files, maps, and dev manifest from deploy
+## Verification
 
-### Content Security Policy (CSP)
-
-Excel on the web enforces a CSP. External domains for network requests (fetch/XHR) must be added to `vercel.json` `connect-src` directive:
-
-```json
-"connect-src 'self' https://login.microsoftonline.com ... https://minisforum.tailfe1a8c.ts.net https://openrouter.ai https://macbook-pro-2.tailfe1a8c.ts.net ..."
+```bash
+npm run lint              # MUST report 0 errors
+npm run build             # MUST exit 0
+npm run test              # MUST exit 0
 ```
-
-**Note:** `AppDomains` in manifests is only for navigation control (which domains open inside the task pane vs new browser window on desktop). It does NOT affect CSP. Network requests are controlled solely by the CSP in `vercel.json`.
-
-Changes are auto-deployed on push to `master`.
-
-### After Deployment
-
-1. Copy the production URL (e.g., `https://my-app.vercel.app`)
-2. Update the `HostedResource` and `SupportUrl` values in `manifest.xml` to point to your Vercel URL
-3. Validate: `npm run validate`
-4. Sideload the updated manifest in Excel, or publish to Microsoft App Store
-
-### CI/CD
-
-Push to `master` triggers automatic production deployment. Preview deployments are created for every PR/branch push.
 
 ## Custom Functions
 
@@ -100,85 +115,13 @@ All Excel-facing functions need the `@customfunction` JSDoc tag:
 function myFunc(input) { ... }
 ```
 
-`functions.json` metadata is auto-generated by `CustomFunctionsMetadataPlugin` during build.
+`functions.json` metadata is auto-generated by `CustomFunctionsMetadataPlugin` during build. Streaming functions (e.g., `clock`, `increment`) use `CustomFunctions.StreamingInvocation`.
 
-## Versioning
+## Deployment
 
-Track version in `VERSION` file (root). Format: `MAJOR.MINOR.PATCH` (e.g., `1.0.0`).
+**No `vercel.json` in this repo.** The `webpack.config.cjs` `urlProd` default is `https://excel-ten-theta.vercel.app/`. Production deployment is configured via Vercel CLI or the Vercel dashboard.
 
-**Auto-increment on every commit:**
-1. Read `VERSION` file → parse `MAJOR.MINOR.PATCH`
-2. Increment `PATCH` by 1 (e.g., `1.0.0` → `1.0.1`)
-3. When user says "go to 2.0" (or any major bump), set `MAJOR+1`, reset `MINOR=0`, `PATCH=0` (e.g., `1.0.5` → `2.0.0`)
-
-**Update all manifests** (`manifest.xml`, `manifest.dev.xml`, `manifest.ppt.xml`):
-- `<Version>` tag → `MAJOR.MINOR.PATCH.1` (Office format, always `.1` for patch)
-- `<DisplayName DefaultValue="..."/>` → append `-vMAJOR.MINOR.PATCH` suffix
-  - `exceljs-main` → `exceljs-main-v1.0.0`
-  - `pptjs-main` → `pptjs-main-v1.0.0`
-  - `exceljs-dev` → `exceljs-dev-v1.0.0`
-
-**Build output:** `npm run build` copies `manifest*.xml` from root → `dist/` via `CopyWebpackPlugin`, so updating source manifests automatically propagates to dist/.
-
-## Verification
-
-**NEVER claim a task is complete without running a verification command.**
-
-### Code Verification (always available)
-
-```bash
-npm run lint              # lint check — MUST report 0 errors
-npm run build             # production build — MUST exit 0
-```
-
-### Spreadsheet Verification (when task modifies .xlsx files)
-
-When a task involves creating or modifying Excel workbook content (`.xlsx` files), agents MUST NOT claim success based on reading source code alone. Source code ≠ spreadsheet output.
-
-**Required verification for spreadsheet tasks:**
-
-1. **Read the source code** that generates the spreadsheet (taskpane.js, functions.js, etc.)
-2. **Run a verification script** that opens the generated `.xlsx` file and asserts cell values, formulas, and structure
-3. **Report actual output** — not "should be correct" or "looks good"
-
-Example verification script pattern:
-
-```javascript
-// verify.js — run with: node verify.js
-const XLSX = require("xlsx");
-const wb = XLSX.readFile("output.xlsx");
-const sheet = wb.Sheets["Tableau de Bord"];
-
-// Assert cell values exist and are not errors
-const val = XLSX.utils.decode_cell(sheet["A1"].v);
-if (sheet["A1"].v === undefined || typeof sheet["A1"].v === "string" && sheet["A1"].v.startsWith("#")) {
-  console.error("FAIL: A1 has unexpected value:", sheet["A1"].v);
-  process.exit(1);
-}
-console.log("PASS: Tableau de Bord sheet verified");
-```
-
-**Run with:** `node verify.js` — exit code 0 = verified, non-zero = failure.
-
-### Agent Verification Protocol
-
-When an agent is asked to verify its own work:
-
-| Step | Action |
-|------|--------|
-| 1 | Identify what proves correctness (lint output, build output, verification script output) |
-| 2 | Run the FULL verification command |
-| 3 | Read the complete output — check exit code, count failures |
-| 4 | Only then state the result with evidence |
-
-**Forbidden claims without evidence:**
-- "The task is complete" — without running verification
-- "Looks correct" — without reading actual output
-- "Should work" — without executing
-- "No errors detected" — without running a checker
-
-**Required format for verification claims:**
-```
-[command] → [exit code] → [key output lines]
-```
-Example: `npm run lint → exit 0 → No lint errors found`
+**After deployment:**
+1. Update `manifest.dev.xml` URLs to point to your production URL
+2. Validate: `npm run validate`
+3. Sideload the updated manifest in Excel
