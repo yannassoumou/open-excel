@@ -1,16 +1,9 @@
 #!/usr/bin/env node
 /**
- * Excel CLI — Dev server + sideload launcher
+ * Excel CLI — KuroAgent dev server, sideload, update, and help
  *
- * Usage:
- *   excel                    Start dev server, open Excel/taskpane
- *   excel workbook.xlsx      Open workbook reference
- *   excel --help             Show help
- *   excel --version          Show version
- *   excel --stop             Stop running dev server
- *   excel -m PATH            Custom manifest path
- *   excel --manifest PATH    Custom manifest path
- *   excel --no-open          Skip open browser/Excel
+ * The only command users need after install.ps1 / install.sh.
+ * Works from any directory — finds the project automatically.
  */
 
 import path from "path";
@@ -18,21 +11,43 @@ import fs from "fs";
 import { spawn, execSync } from "child_process";
 import https from "https";
 import process from "process";
+import os from "os";
 import { fileURLToPath } from "url";
 
 const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// Save original cwd BEFORE any path manipulation so we can resolve
-// user-provided workbook paths relative to where they ran the command.
-const originalCwd = process.cwd();
+const cliDir = path.dirname(__filename);
 
 const ADDIN_NAME = "KuroAgent";
 const HOST_NAME = "Excel";
 const DEFAULT_PORT = 3000;
 
-// --- locate project root ---
+// Save original cwd so we resolve workbook paths relative to where
+// the user ran the command, not relative to the project root.
+const originalCwd = process.cwd();
+
+// --- find project root ---
+// Strategy: try in order:
+//   1. EXCEL_HOME env var
+//   2. ~/.kuroagent (or USERPROFILE/.kuroagent on Windows)
+//   3. walk up from cwd looking for package.json or manifest.xml
+//   4. parent of this bin/excel script
 function findProjectRoot() {
+  // 1. EXCEL_HOME env var
+  const envHome = process.env.EXCEL_HOME;
+  if (envHome && fs.existsSync(path.join(envHome, "manifest.xml"))) {
+    return path.resolve(envHome);
+  }
+
+  // 2. ~/.kuroagent / %USERPROFILE%.kuroagent
+  const homeDir = process.env.USERPROFILE || process.env.HOME || os.homedir();
+  if (homeDir) {
+    const kuroagent = path.join(homeDir, ".kuroagent");
+    if (fs.existsSync(path.join(kuroagent, "manifest.xml"))) {
+      return kuroagent;
+    }
+  }
+
+  // 3. walk up from cwd
   let dir = process.cwd();
   for (let i = 0; i < 20; i++) {
     const pkg = path.join(dir, "package.json");
@@ -45,27 +60,31 @@ function findProjectRoot() {
         ) {
           return dir;
         }
-      } catch {
-        /* skip */
-      }
+      } catch {}
     }
-    if (fs.existsSync(path.join(dir, "manifest.xml"))) {
-      return dir;
-    }
+    if (fs.existsSync(path.join(dir, "manifest.xml"))) return dir;
     const parent = path.dirname(dir);
     if (parent === dir) break;
     dir = parent;
   }
-  // fallback: parent of bin/
-  const candidate = path.resolve(__dirname, "..");
+
+  // 4. parent directory of this script
+  const candidate = path.resolve(cliDir, "..");
   if (fs.existsSync(path.join(candidate, "manifest.xml"))) return candidate;
+
   return null;
 }
 
 const repoDir = findProjectRoot();
 if (!repoDir) {
-  console.error("[!!] Cannot find KuroAgent project directory.");
-  console.error("    Run from inside the project or install via install.sh / install.ps1.");
+  console.error(`[!!] Cannot find KuroAgent project directory.`);
+  console.error(`    Run install first:`);
+  if (process.platform === "win32") {
+    console.error(`    iwr https://raw.githubusercontent.com/yannassoumou/open-excel/master/setup.ps1 -OutFile setup.ps1`);
+    console.error(`    powershell -ExecutionPolicy Bypass -File .\\setup.ps1`);
+  } else {
+    console.error(`    curl -fsSL https://raw.githubusercontent.com/yannassoumou/open-excel/master/setup.sh | bash`);
+  }
   process.exit(1);
 }
 
@@ -82,11 +101,15 @@ const helpFlag = args.includes("--help") || args.includes("-h");
 const versionFlag = args.includes("--version");
 const stopFlag = args.includes("--stop");
 const noOpen = args.includes("--no-open");
+const updateFlag = args.includes("--update");
+const installFlag = args.includes("--install");
 const manifestArg = readFlag(args, ["--manifest", "-m"]);
 
 if (helpFlag) { printHelp(); process.exit(0); }
 if (versionFlag) { printVersion(); process.exit(0); }
 if (stopFlag) { stopServer(); process.exit(0); }
+if (updateFlag) { doUpdate(); process.exit(0); }
+if (installFlag) { doInstall(); process.exit(0); }
 
 let manifestPath = manifestArg
   ? path.resolve(manifestArg)
@@ -97,56 +120,114 @@ if (!fs.existsSync(manifestPath)) {
   process.exit(1);
 }
 
-// --- main ---
+// === MAIN ===
 async function main() {
   const platform = process.platform;
 
-  // On Windows, office-addin-debugging start handles BOTH the dev server
-  // AND the sideloading. If we start webpack ourselves first, the SDK
-  // will fail to bind port 3000 and shut down.
+  // Windows: office-addin-debugging handles server + sideload together
   if (platform === "win32") {
     windowsSideload(manifestPath, openFile);
     return;
   }
 
-  // Linux/Mac: start webpack ourselves + print sideloading instructions
+  // Linux/Mac: start webpack ourselves + print instructions
   const serverRunning = await isServerRunning();
-
   if (serverRunning) {
     log(`Dev server already running at ${DEV_URL}`);
   } else {
     log(`Starting dev server ...`);
     await startDevServer();
   }
-
   await waitForServer();
   log(`Dev server ready at ${DEV_URL}`);
 
   if (!noOpen) {
     printSideloadingInstructions(manifestPath, "Linux");
-
     if (!openFile) {
-      log(`\nTo open a workbook:`);
-      log(`  excel path/to/workbook.xlsx`);
+      log(`To open a workbook:`);
       log(`  excel -f path/to/workbook.xlsx`);
     }
-  } else {
-    log(`--no-open: dev server running, skipping sideload.`);
   }
 
   log(`\nKeep this terminal open for live reloading.`);
   log(`To stop:  excel --stop`);
 }
 
-// --- server helpers ---
+// === UPDATE ===
+function doUpdate() {
+  log(`Updating ${ADDIN_NAME} ...`);
+  try {
+    log(`Pulling latest changes from GitHub ...`);
+    execSync(`git fetch origin master`, { cwd: repoDir, stdio: "inherit", shell: true });
+    const local = execSync(`git rev-parse HEAD`, { cwd: repoDir, encoding: "utf8" }).trim();
+    const remote = execSync(`git rev-parse FETCH_HEAD`, { cwd: repoDir, encoding: "utf8" }).trim();
+    if (local === remote) {
+      log(`Already up to date.`);
+    } else {
+      execSync(`git reset --hard FETCH_HEAD`, { cwd: repoDir, stdio: "inherit", shell: true });
+      log(`Update complete.`);
+    }
+  } catch {
+    log(`[!] git pull failed. Trying direct pull ...`);
+    try {
+      execSync(`git pull origin master`, { cwd: repoDir, stdio: "inherit", shell: true });
+    } catch (err) {
+      log(`[!!] Update failed: ${err.message}`);
+      process.exit(1);
+    }
+  }
 
+  // Reinstall dependencies
+  try {
+    log(`Reinstalling Node dependencies ...`);
+    execSync(`npm install --no-audit --no-fund --loglevel=error`, { cwd: repoDir, stdio: "inherit", shell: true });
+    log(`Dependencies updated.`);
+  } catch {
+    log(`[!] npm install returned non-zero (may still work)`);
+  }
+
+  // Re-link CLI
+  try {
+    log(`Re-linking excel CLI ...`);
+    execSync(`npm link`, { cwd: repoDir, stdio: "pipe", shell: true });
+    log(`CLI re-linked.`);
+  } catch {
+    log(`[!] npm link returned non-zero (CLI may still work)`);
+  }
+
+  log(``);
+  log(`${ADDIN_NAME} updated successfully.`);
+  log(`Run \`excel\` to start as usual.`);
+}
+
+// === INSTALL (from anywhere) ===
+function doInstall() {
+  log(`Installing / re-installing ${ADDIN_NAME} ...`);
+  log(`Project directory: ${repoDir}`);
+  try {
+    log(`Installing Node dependencies ...`);
+    execSync(`npm install --no-audit --no-fund --loglevel=error`, { cwd: repoDir, stdio: "inherit", shell: true });
+    log(`Dependencies installed.`);
+  } catch (err) {
+    log(`[!!] npm install failed: ${err.message}`);
+    process.exit(1);
+  }
+  try {
+    log(`Linking excel CLI ...`);
+    execSync(`npm link`, { cwd: repoDir, stdio: "pipe", shell: true });
+    log(`CLI linked.`);
+  } catch {
+    log(`[!] npm link returned non-zero`);
+  }
+  log(`${ADDIN_NAME} ready. Run \`excel\` to start.`);
+}
+
+// === SERVER HELPERS ===
 async function isServerRunning() {
   return new Promise((resolve) => {
-    const req = https.get(
-      DEV_URL,
-      { rejectUnauthorized: false, timeout: 2000 },
-      (res) => resolve(res.statusCode === 200)
-    );
+    const req = https.get(DEV_URL, { rejectUnauthorized: false, timeout: 2000 }, (res) => {
+      resolve(res.statusCode === 200);
+    });
     req.on("error", () => resolve(false));
     req.on("timeout", () => { req.destroy(); resolve(false); });
   });
@@ -160,14 +241,10 @@ async function waitForServer(timeoutMs = 45000) {
         reject(new Error(`Dev server did not start within ${(timeoutMs / 1000).toFixed(0)}s`));
         return;
       }
-      const req = https.get(
-        DEV_URL,
-        { rejectUnauthorized: false, timeout: 2000 },
-        (res) => {
-          if (res.statusCode === 200) resolve();
-          else setTimeout(check, 1500);
-        }
-      );
+      const req = https.get(DEV_URL, { rejectUnauthorized: false, timeout: 2000 }, (res) => {
+        if (res.statusCode === 200) resolve();
+        else setTimeout(check, 1500);
+      });
       req.on("error", () => setTimeout(check, 1500));
     };
     check();
@@ -177,39 +254,20 @@ async function waitForServer(timeoutMs = 45000) {
 async function startDevServer() {
   return new Promise((resolve, reject) => {
     const child = spawn("npx", ["webpack", "serve", "--mode", "development"], {
-      cwd: repoDir,
-      stdio: "inherit",
-      shell: true,
+      cwd: repoDir, stdio: "inherit", shell: true,
       env: { ...process.env, PORT: String(PORT) },
     });
-
     let done = false;
-    const maxBootTime = setTimeout(() => {
-      if (!done) {
-        done = true;
-        resolve(); // let waitForServer double-check
-      }
-    }, 15000);
-
+    const maxBootTime = setTimeout(() => { if (!done) { done = true; resolve(); } }, 15000);
     const onData = (data) => {
-      const text = data.toString();
-      if (/compiled/.test(text) && !done) {
-        done = true;
-        clearTimeout(maxBootTime);
-        setTimeout(resolve, 2000);
+      if (/compiled/.test(data.toString()) && !done) {
+        done = true; clearTimeout(maxBootTime); setTimeout(resolve, 2000);
       }
     };
     if (child.stdout) child.stdout.on("data", onData);
     if (child.stderr) child.stderr.on("data", onData);
-
-    child.on("error", (err) => {
-      clearTimeout(maxBootTime);
-      if (!done) reject(new Error(`Dev server failed: ${err.message}`));
-    });
-    child.on("exit", (code) => {
-      clearTimeout(maxBootTime);
-      if (!done) reject(new Error(`Dev server exited with code ${code}`));
-    });
+    child.on("error", (err) => { clearTimeout(maxBootTime); if (!done) reject(new Error(`Dev server failed: ${err.message}`)); });
+    child.on("exit", (code) => { clearTimeout(maxBootTime); if (!done) reject(new Error(`Dev server exited with code ${code}`)); });
   });
 }
 
@@ -217,10 +275,8 @@ function stopServer() {
   log(`Stopping dev server(s) on port ${PORT} ...`);
   try {
     if (process.platform === "win32") {
-      execSync(`for /f "tokens=5" %a in ('netstat -ano ^| findstr :${PORT} ^| findstr LISTENING') do @echo %a`, { encoding: "utf8" }).trim()
-        .split(/\r?\n/)
-        .filter(Boolean)
-        .forEach((pid) => { try { execSync(`taskkill /F /PID ${pid}`); } catch {} });
+      const out = execSync(`for /f "tokens=5" %a in ('netstat -ano ^| findstr :${PORT} ^| findstr LISTENING') do @echo %a`, { encoding: "utf8" }).trim();
+      if (out) out.split(/\r?\n/).filter(Boolean).forEach((pid) => { try { execSync(`taskkill /F /PID ${pid}`); } catch {} });
     } else {
       execSync(`lsof -ti :${PORT} 2>/dev/null | xargs -r kill -9 2>/dev/null || true`, { stdio: "inherit" });
     }
@@ -230,20 +286,15 @@ function stopServer() {
   }
 }
 
-// --- platform sideload ---
-
+// === PLATFORM SIDELOAD ===
 function windowsSideload(manifest, workbookPath) {
-  log(`Opening Excel via office-addin-debugging ...`);
+  log(`Starting ${ADDIN_NAME} (dev server + Excel) ...`);
   try {
     let cmd;
     const manifestFile = `"${manifest}"`;
     if (workbookPath) {
-      // Resolve relative to the ORIGINAL working directory, not the project root.
-      // Users often run `excel` from their Documents/Desktop, not from .kuroagent.
       let absPath = path.resolve(originalCwd, workbookPath);
-      if (!fs.existsSync(absPath)) {
-        absPath = path.resolve(repoDir, workbookPath);
-      }
+      if (!fs.existsSync(absPath)) absPath = path.resolve(repoDir, workbookPath);
       if (fs.existsSync(absPath)) {
         log(`Workbook: ${absPath}`);
         cmd = `npx office-addin-debugging start ${manifestFile} desktop --document "${absPath}"`;
@@ -261,33 +312,90 @@ function windowsSideload(manifest, workbookPath) {
   }
 }
 
-function printSideloadingInstructions(manifest, os) {
+function printSideloadingInstructions(manifest) {
   const manifestUrl = manifest.startsWith("http") ? manifest : `file://${manifest}`;
-
-  log(`\nAdd-in dev server running at ${DEV_URL}`);
-  log(`─── Load the add-in ───`);
-  log(``);
-  log(`Option 1 -- Excel Online (fastest):`);
+  log(`Add-in dev server running at ${DEV_URL}`);
+  log(`Option 1 - Excel Online:`);
   log(`  1. Browse to https://excel.office.com`);
   log(`  2. Insert -> Get Add-ins -> Custom Add-ins`);
   log(`  3. Enter URL: ${DEV_URL}/taskpane.html`);
   log(`     (or load manifest file: ${manifestUrl})`);
-  log(``);
-  log(`Option 2 -- Excel Desktop (${os}):`);
+  log(`Option 2 - Excel Desktop:`);
   log(`  1. Open Excel`);
-  log(`  2. Insert -> Get Add-ins -> Custom Add-ins tab`);
-  log(`  3. Browse to: ${manifest}`);
-  log(``);
-
+  log(`  2. Insert -> Get Add-ins -> Custom Add-ins`);
+  log(`  3. Load manifest: ${manifest}`);
   try {
     if (process.platform === "darwin") execSync(`open "https://excel.office.com" 2>/dev/null || true`);
     else if (process.platform === "linux") execSync(`xdg-open "https://excel.office.com" 2>/dev/null || true`);
+  } catch {}
+}
+
+// === HELP ===
+function printHelp() {
+  console.log(`
+  ${ADDIN_NAME} - AI assistant for Excel
+
+  One command does it all. After install, you only need "excel".
+
+  USAGE
+    excel                       Start dev server, open Excel with KuroAgent
+    excel file.xlsx             Start + open the specified workbook
+    excel -f file.xlsx          Same as above (explicit file flag)
+    excel -m manifest.xml       Use a custom manifest path
+    excel --no-open             Start server only, don't open Excel
+    excel --stop                Stop the dev server on port 3000
+    excel --update              Pull latest from GitHub and refresh
+    excel --install             (Re)install Node dependencies (from any dir)
+    excel --version             Show KuroAgent version
+    excel --help                Show this help
+
+  WORKBOOK EXAMPLES
+    excel report.xlsx           Opens report.xlsx in the current directory
+    excel -f C:\\data\\sales.xlsx  Opens with absolute path
+    excel --no-open             Just starts the dev server in background
+
+  UPDATE WORKFLOW
+    excel --update              Pulls latest code, reinstalls deps, relinks CLI
+                                Run this whenever a new version is available.
+
+  CONFIGURE LLM ENDPOINT
+    Open the KuroAgent panel in Excel (Add-ins tab), then set:
+      - Endpoint:  https://openrouter.ai/api/v1/chat/completions (or any OpenAI-compatible URL)
+      - Model:     gpt-4 (or your chosen model)
+      - API Key:   your bearer token (leave empty for local LLMs)
+
+  SUPPORTED LLM TOOLS
+    Ollama           http://localhost:11434/v1/chat/completions
+    LM Studio        http://localhost:1234/v1/chat/completions
+    llama.cpp        http://localhost:8082/v1/chat/completions
+    vLLM             http://localhost:8000/v1/chat/completions
+    Any OpenAI-compatible /v1/chat/completions endpoint
+
+  INSTALL (first-time only)
+    Windows:
+      iwr https://raw.githubusercontent.com/yannassoumou/open-excel/master/setup.ps1 -OutFile setup.ps1
+      powershell -ExecutionPolicy Bypass -File .\\setup.ps1
+
+    Linux/macOS:
+      curl -fsSL https://raw.githubusercontent.com/yannassoumou/open-excel/master/setup.sh | bash
+
+  MORE INFO
+    Source:     https://github.com/yannassoumou/open-excel
+    Issues:     https://github.com/yannassoumou/open-excel/issues
+`);
+}
+
+// === VERSION ===
+function printVersion() {
+  try {
+    const version = fs.readFileSync(path.join(repoDir, "VERSION"), "utf8").trim();
+    console.log(`${ADDIN_NAME} v${version}`);
   } catch {
-    /* ignore */
+    console.log(`${ADDIN_NAME} (version file not found)`);
   }
 }
 
-// --- utils ---
+// === UTILS ===
 function readFlag(args, names) {
   for (let i = 0; i < args.length - 1; i++) {
     if (names.includes(args[i])) return args[i + 1];
@@ -295,39 +403,11 @@ function readFlag(args, names) {
   return null;
 }
 
-function printHelp() {
-  console.log(`
-${ADDIN_NAME} -- Developer CLI
-
-Usage:
-  excel                    Start dev server + sideload taskpane
-  excel workbook.xlsx      Above + path to workbook
-  excel --stop             Stop dev server on port ${DEFAULT_PORT}
-  excel --no-open          Start server only, no Excel/browser
-  excel -m PATH            Use custom manifest file
-  excel --manifest PATH    Same as -m
-  excel --version          Show version
-  excel --help             Show this help
-
-Environment:
-  EXCEL_PORT               Override dev port (default: ${DEFAULT_PORT})
-`);
-}
-
-function printVersion() {
-  try {
-    const version = fs.readFileSync(path.join(repoDir, "VERSION"), "utf8").trim();
-    console.log(`${ADDIN_NAME} v${version}`);
-  } catch {
-    console.log(`${ADDIN_NAME} (version not found)`);
-  }
-}
-
 function log(msg) {
   console.log(`  [excel] ${msg}`);
 }
 
-// --- run ---
+// === RUN ===
 main().catch((err) => {
   console.error(`  [!!] ${err.message}`);
   process.exit(1);
