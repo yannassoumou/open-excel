@@ -224,42 +224,25 @@ function stopServer() {
 // --- platform sideload ---
 
 function windowsSideload(manifest, workbookPath) {
-  log(`Opening Excel (registry sideload already configured) ...`);
+  log(`Opening Excel via office-addin-debugging ...`);
   try {
-    // Find Excel.exe
-    const paths = [
-      "C:\\Program Files\\Microsoft Office\\root\\Office16\\EXCEL.EXE",
-      "C:\\Program Files (x86)\\Microsoft Office\\root\\Office16\\EXCEL.EXE",
-      "C:\\Program Files\\Microsoft Office\\Office16\\EXCEL.EXE",
-    ];
-    let excelExe = null;
-    for (const p of paths) {
-      if (fs.existsSync(p)) { excelExe = p; break; }
-    }
-
+    let cmd;
+    const manifestFile = `"${manifest}"`;
     if (workbookPath) {
       const absPath = path.resolve(workbookPath);
-      if (!fs.existsSync(absPath)) {
-        log(`[!] File not found: ${absPath}`);
-      } else {
+      if (fs.existsSync(absPath)) {
         log(`Workbook: ${absPath}`);
-        if (excelExe) {
-          execSync(`start "" "${excelExe}" "${absPath}"`, { shell: true });
-        } else {
-          // Open with default app (should be Excel)
-          execSync(`start "" "${absPath}"`, { shell: true });
-        }
+        cmd = `npx office-addin-debugging start ${manifestFile} desktop --document "${absPath}"`;
+      } else {
+        log(`[!] File not found: ${absPath}, launching without workbook`);
+        cmd = `npx office-addin-debugging start ${manifestFile} desktop`;
       }
     } else {
-      if (excelExe) {
-        execSync(`start "" "${excelExe}"`, { shell: true });
-      } else {
-        execSync(`start excel.exe`, { shell: true });
-      }
+      cmd = `npx office-addin-debugging start ${manifestFile} desktop`;
     }
-    log(`Excel opened. The add-in should appear on next startup.`);
+    execSync(cmd, { cwd: repoDir, stdio: "inherit", shell: true });
   } catch (err) {
-    log(`[!!] Could not open Excel automatically: ${err.message}`);
+    log(`[!!] Could not launch Excel: ${err.message}`);
     log(`    Please sideload manually: Add-ins -> Custom Add-ins -> ${manifest}`);
   }
 }
