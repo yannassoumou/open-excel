@@ -1,8 +1,8 @@
 #!/bin/bash
-# uninstall.sh - Uninstall KuroAgent Excel Add-in and development tools
+# uninstall.sh - Uninstall kuroagent Excel Add-in and development tools
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/yannassoumou/open-excel/master/uninstall.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/yannassoumou/open-kuroagent/master/uninstall.sh | bash
 #   # OR from local repo:
 #   ./uninstall.sh
 #   ./uninstall.sh --all     # Also remove the installation directory
@@ -15,7 +15,7 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
-ADDIN_NAME="KuroAgent"
+ADDIN_NAME="kuroagent"
 ARG="${1:-}"
 
 print_step()    { echo -e "\n${CYAN}>>> $1${NC}"; }
@@ -23,16 +23,16 @@ print_success() { echo -e "    ${GREEN}[OK] $1${NC}"; }
 print_warning() { echo -e "    ${YELLOW}[!!] $1${NC}"; }
 
 # --- 1. Unlink the Excel CLI ---
-print_step "Unlinking excel CLI"
+print_step "Unlinking kuroagent CLI"
 
-if npm unlink -g excel-custom-functions-js 2>/dev/null; then
+if npm unlink -g kuroagent-custom-functions-js 2>/dev/null; then
     print_success "npm unlink completed"
 else
     print_warning "CLI was not linked via npm (may have been symlinked)"
 fi
 
 # Remove manual symlink if it exists
-SYMLINK="$HOME/.local/bin/excel"
+SYMLINK="$HOME/.local/bin/kuroagent"
 if [ -L "$SYMLINK" ]; then
     rm -f "$SYMLINK"
     print_success "Removed symlink: $SYMLINK"
@@ -74,6 +74,6 @@ echo -e "${GREEN}  ${ADDIN_NAME} uninstalled successfully${NC}"
 echo -e "${GREEN}════════════════════════════════════════${NC}"
 echo -e ""
 echo -e "  To reinstall:"
-echo -e "    ${CYAN}curl -fsSL https://raw.githubusercontent.com/yannassoumou/open-excel/master/install.sh | bash${NC}"
+echo -e "    ${CYAN}curl -fsSL https://raw.githubusercontent.com/yannassoumou/open-kuroagent/master/install.sh | bash${NC}"
 echo -e ""
 echo -e "  Note: Restart Excel to complete the uninstall."

@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Uninstalls KuroAgent Excel Add-in and development tools.
+    Uninstalls kuroagent Excel Add-in and development tools.
 
 .DESCRIPTION
     Removes registry sideloading keys, unlinks the Excel CLI,
@@ -22,7 +22,7 @@ param(
     [switch]$All
 )
 
-$AddInName = "KuroAgent"
+$AddInName = "kuroagent"
 $Guid = "14254940-5dfe-46ec-b860-a8291f526990"
 $RegPath = "HKCU:\Software\Microsoft\Office\Excel\Addins\$Guid"
 
@@ -42,7 +42,7 @@ if (Test-Path $RegPath) {
 }
 
 # --- 2. Unlink the Excel CLI ---
-Write-Step "Unlinking excel CLI"
+Write-Step "Unlinking kuroagent CLI"
 
 # Remove CLI wrapper scripts from global npm bin
 $NpmGlobalBin = & npm bin -g 2>$null
@@ -52,7 +52,7 @@ if (-not $NpmGlobalBin) {
 
 $RemovedAny = $false
 
-foreach ($fileName in @("excel.cmd", "excel.ps1", "excel")) {
+foreach ($fileName in @("kuroagent.cmd", "kuroagent.ps1", "kuroagent")) {
     $f = Join-Path $NpmGlobalBin $fileName
     if (Test-Path $f) {
         Remove-Item $f -Force -ErrorAction SilentlyContinue
@@ -62,7 +62,7 @@ foreach ($fileName in @("excel.cmd", "excel.ps1", "excel")) {
 }
 
 # Remove bin directory created by npm link
-$ExcelBinDir = Join-Path $NpmGlobalBin "excel"
+$ExcelBinDir = Join-Path $NpmGlobalBin "kuroagent"
 if (Test-Path $ExcelBinDir) {
     Remove-Item $ExcelBinDir -Recurse -Force -ErrorAction SilentlyContinue
     Write-Success "Removed: $ExcelBinDir"
@@ -75,7 +75,7 @@ if (-not $RemovedAny) {
 
 # Clean uninstall npm link for the package
 try {
-    & npm unlink -g excel-custom-functions-js 2>$null | Out-Null
+    & npm unlink -g kuroagent-custom-functions-js 2>$null | Out-Null
     Write-Success "npm unlink completed"
 } catch {
     # already clean
@@ -102,7 +102,7 @@ Write-Host "  $AddInName uninstalled successfully" -ForegroundColor Green
 Write-Host "========================================" -ForegroundColor Green
 Write-Host ""
 Write-Host "  To reinstall:" -ForegroundColor Cyan
-Write-Host "    iwr https://raw.githubusercontent.com/yannassoumou/open-excel/master/install.ps1 -OutFile install.ps1"
+Write-Host "    iwr https://raw.githubusercontent.com/yannassoumou/open-kuroagent/master/install.ps1 -OutFile install.ps1"
 Write-Host "    powershell -ExecutionPolicy Bypass -File .\install.ps1"
 Write-Host ""
 Write-Host "  Note: Restart Excel to complete the uninstall." -ForegroundColor Yellow

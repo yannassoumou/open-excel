@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Unified setup for KuroAgent Excel Add-in.
+    Unified setup for kuroagent Excel Add-in.
     Install, update, or uninstall in one script.
 
 .DESCRIPTION
@@ -31,11 +31,11 @@ function Write-Warning-C   { Write-Host "    [!!] $($args -join ' ')" -Foregroun
 function Write-Error-C     { Write-Host "    [!!] $($args -join ' ')" -ForegroundColor Red }
 function Write-Info        { Write-Host "    [i] $($args -join ' ')" -ForegroundColor White }
 
-$AddInName   = "KuroAgent"
+$AddInName   = "kuroagent"
 $Guid        = "14254940-5dfe-46ec-b860-a8291f526990"
 $RegPath     = "HKCU:\Software\Microsoft\Office\Excel\Addins\$Guid"
 $InstallDir  = Join-Path $env:USERPROFILE ".kuroagent"
-$RepoUrl     = "https://github.com/yannassoumou/open-excel.git"
+$RepoUrl     = "https://github.com/yannassoumou/open-kuroagent.git"
 
 # --- Interactive menu ---
 if ($Action -eq "") {
@@ -113,27 +113,27 @@ function Do-Install {
     }
 
     # Register CLI
-    Write-Step "Registering 'excel' CLI"
+    Write-Step "Registering 'kuroagent' CLI"
     try {
         & npm link 2>$null | Out-Null
-        Write-Success "npm link -- excel CLI on PATH"
+        Write-Success "npm link -- kuroagent CLI on PATH"
     } catch {
         $BinDir = Join-Path $env:APPDATA "npm"
         if (-not (Test-Path $BinDir)) { New-Item -ItemType Directory -Path $BinDir -Force | Out-Null }
-        $CmdPath = Join-Path $BinDir "excel.cmd"
+        $CmdPath = Join-Path $BinDir "kuroagent.cmd"
         $NodePath = (Get-Command node).Source
-        $ExcelScript = Join-Path $InstallDir "bin\excel"
+        $ExcelScript = Join-Path $InstallDir "bin\kuroagent"
         Set-Content -Path $CmdPath -Value "@`"$NodePath`" `"$ExcelScript`" %"
         Write-Success "Created CLI wrapper at $CmdPath"
     }
 
     # Verify
     Write-Step "Verifying installation"
-    if (Get-Command excel -ErrorAction SilentlyContinue) {
-        Write-Success "excel CLI found"
-        & excel --version
+    if (Get-Command kuroagent -ErrorAction SilentlyContinue) {
+        Write-Success "kuroagent CLI found"
+        & kuroagent --version
     } else {
-        Write-Error-C "excel CLI not on PATH. Refresh terminal or restart."
+        Write-Error-C "kuroagent CLI not on PATH. Refresh terminal or restart."
         exit 1
     }
 
@@ -180,9 +180,9 @@ function Do-Update {
     & npm install --no-audit --no-fund --loglevel=error | Out-Null
     Write-Success "Dependencies updated"
 
-    Write-Step "Re-linking excel CLI"
+    Write-Step "Re-linking kuroagent CLI"
     try {
-        & npm uninstall -g excel-custom-functions-js 2>$null | Out-Null
+        & npm uninstall -g kuroagent-custom-functions-js 2>$null | Out-Null
         & npm link 2>$null | Out-Null
         Write-Success "CLI re-linked"
     } catch {
@@ -190,9 +190,9 @@ function Do-Update {
     }
 
     # Verify
-    if (Get-Command excel -ErrorAction SilentlyContinue) {
+    if (Get-Command kuroagent -ErrorAction SilentlyContinue) {
         Write-Step "Verifying"
-        Write-Success "excel CLI: $(& excel --version)"
+        Write-Success "kuroagent CLI: $(& kuroagent --version)"
     }
 
     Show-Summary "update"
@@ -214,22 +214,22 @@ function Do-Uninstall {
     }
 
     # CLI
-    Write-Step "Unlinking excel CLI"
+    Write-Step "Unlinking kuroagent CLI"
     $NpmBin = & npm bin -g 2>$null
     if (-not $NpmBin) { $NpmBin = Join-Path $env:APPDATA "npm" }
 
-    foreach ($f in @("excel.cmd", "excel.ps1")) {
+    foreach ($f in @("kuroagent.cmd", "kuroagent.ps1")) {
         $p = Join-Path $NpmBin $f
         if (Test-Path $p) { Remove-Item $p -Force -ErrorAction SilentlyContinue; Write-Success "Removed: $f" }
     }
 
-    $ExcelBinDir = Join-Path $NpmBin "excel"
+    $ExcelBinDir = Join-Path $NpmBin "kuroagent"
     if (Test-Path $ExcelBinDir) {
         Remove-Item $ExcelBinDir -Recurse -Force -ErrorAction SilentlyContinue
-        Write-Success "Removed: excel/ dir"
+        Write-Success "Removed: kuroagent/ dir"
     }
 
-    try { & npm uninstall -g excel-custom-functions-js 2>$null | Out-Null } catch {}
+    try { & npm uninstall -g kuroagent-custom-functions-js 2>$null | Out-Null } catch {}
 
     # Kill server
     if (Get-Command lsof -ErrorAction SilentlyContinue) {
@@ -276,7 +276,7 @@ function Do-Uninstall {
     Write-Host "========================================" -ForegroundColor Green
     Write-Host ""
     Write-Host "  To reinstall:" -ForegroundColor Cyan
-    Write-Host "    iwr https://raw.githubusercontent.com/yannassoumou/open-excel/master/setup.ps1 -OutFile setup.ps1"
+    Write-Host "    iwr https://raw.githubusercontent.com/yannassoumou/open-kuroagent/master/setup.ps1 -OutFile setup.ps1"
     Write-Host "    powershell -ExecutionPolicy Bypass -File .\setup.ps1"
     Write-Host ""
     Write-Host "  Note: Restart Excel to complete the uninstall." -ForegroundColor Yellow
@@ -296,11 +296,11 @@ function Show-Summary {
     Write-Host "========================================" -ForegroundColor Green
     Write-Host ""
     Write-Host "  Quick start:" -ForegroundColor Cyan
-    Write-Host "    excel                  Start dev server + sideload"
-    Write-Host "    excel -f file.xlsx     Start + open workbook"
-    Write-Host "    excel --stop           Stop dev server"
-    Write-Host "    excel -m path\xml      Use custom manifest"
-    Write-Host "    excel --no-open        Server only"
+    Write-Host "    kuroagent                  Start dev server + sideload"
+    Write-Host "    kuroagent -f file.xlsx     Start + open workbook"
+    Write-Host "    kuroagent --stop           Stop dev server"
+    Write-Host "    kuroagent -m path\xml      Use custom manifest"
+    Write-Host "    kuroagent --no-open        Server only"
     Write-Host ""
     Write-Host "  Dev server runs on: https://localhost:3000" -ForegroundColor Cyan
     Write-Host "  Repo location:        $InstallDir" -ForegroundColor Cyan

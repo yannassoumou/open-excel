@@ -1,8 +1,8 @@
 #!/bin/bash
-# setup.sh - Unified setup for KuroAgent Excel Add-in
+# setup.sh - Unified setup for kuroagent Excel Add-in
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/yannassoumou/open-excel/master/setup.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/yannassoumou/open-kuroagent/master/setup.sh | bash
 #   # OR from local:
 #   ./setup.sh              # Interactive menu
 #   ./setup.sh install      # First-time install
@@ -20,8 +20,8 @@ RED='\033[0;31m'
 WHITE='\033[1;37m'
 NC='\033[0m'
 
-ADDIN_NAME="KuroAgent"
-REPO_URL="https://github.com/yannassoumou/open-excel.git"
+ADDIN_NAME="kuroagent"
+REPO_URL="https://github.com/yannassoumou/open-kuroagent.git"
 INSTALL_DIR="$HOME/.kuroagent"
 ACTION="${1:-}"
 
@@ -106,13 +106,13 @@ do_install() {
         print_warning "Dev certs step returned non-zero (may already be installed)"
 
     # Register CLI
-    print_step "Registering 'excel' CLI"
+    print_step "Registering 'kuroagent' CLI"
     if npm link 2>/dev/null; then
-        print_success "npm link -- excel CLI on PATH"
+        print_success "npm link -- kuroagent CLI on PATH"
     else
         BIN_DIR="$HOME/.local/bin"
         mkdir -p "$BIN_DIR"
-        ln -sf "$INSTALL_DIR/bin/excel" "$BIN_DIR/excel"
+        ln -sf "$INSTALL_DIR/bin/kuroagent" "$BIN_DIR/kuroagent"
         if [[ ":$PATH:" != *":$BIN_DIR:"* ]]; then
             SHELL_RC="$HOME/.bashrc"
             [ -f "$HOME/.zshrc" ] && SHELL_RC="$HOME/.zshrc"
@@ -121,16 +121,16 @@ do_install() {
             fi
             export PATH="$HOME/.local/bin:$PATH"
         fi
-        print_success "Symlinked excel CLI to $BIN_DIR/excel"
+        print_success "Symlinked kuroagent CLI to $BIN_DIR/kuroagent"
     fi
 
     # Verify
     print_step "Verifying installation"
-    if command -v excel &>/dev/null; then
-        print_success "excel CLI found"
-        excel --version
+    if command -v kuroagent &>/dev/null; then
+        print_success "kuroagent CLI found"
+        kuroagent --version
     else
-        print_error "excel CLI not on PATH. Refresh terminal or restart."
+        print_error "kuroagent CLI not on PATH. Refresh terminal or restart."
         exit 1
     fi
 
@@ -172,15 +172,15 @@ do_update() {
     print_success "Dependencies updated"
 
     # Re-link
-    print_step "Re-linking excel CLI"
-    npm uninstall -g excel-custom-functions-js 2>/dev/null || true
+    print_step "Re-linking kuroagent CLI"
+    npm uninstall -g kuroagent-custom-functions-js 2>/dev/null || true
     npm link 2>/dev/null && print_success "CLI re-linked" || \
         print_warning "npm link returned non-zero (may still work)"
 
     # Verify
-    if command -v excel &>/dev/null; then
+    if command -v kuroagent &>/dev/null; then
         print_step "Verifying"
-        print_success "excel CLI: $(excel --version)"
+        print_success "kuroagent CLI: $(kuroagent --version)"
     fi
 
     show_summary "updated"
@@ -193,15 +193,15 @@ do_uninstall() {
     print_step "Uninstalling ${ADDIN_NAME}"
 
     # Unlink CLI
-    print_step "Unlinking excel CLI"
-    if npm uninstall -g excel-custom-functions-js 2>/dev/null; then
+    print_step "Unlinking kuroagent CLI"
+    if npm uninstall -g kuroagent-custom-functions-js 2>/dev/null; then
         print_success "npm uninstall completed"
     else
         print_warning "CLI was not linked via npm"
     fi
 
     # Remove manual symlink
-    SYMLINK="$HOME/.local/bin/excel"
+    SYMLINK="$HOME/.local/bin/kuroagent"
     if [ -L "$SYMLINK" ]; then
         rm -f "$SYMLINK"
         print_success "Removed symlink: $SYMLINK"
@@ -239,7 +239,7 @@ do_uninstall() {
     echo -e "${GREEN}========================================${NC}"
     echo -e ""
     echo -e "  To reinstall:"
-    echo -e "    ${CYAN}curl -fsSL https://raw.githubusercontent.com/yannassoumou/open-excel/master/setup.sh | bash${NC}"
+    echo -e "    ${CYAN}curl -fsSL https://raw.githubusercontent.com/yannassoumou/open-kuroagent/master/setup.sh | bash${NC}"
     echo -e ""
 }
 
@@ -251,11 +251,11 @@ show_summary() {
     echo -e "${GREEN}========================================${NC}"
     echo -e ""
     echo -e "  Quick start:"
-    echo -e "    ${CYAN}excel                  Start dev server + sideload${NC}"
-    echo -e "    ${CYAN}excel -f file.xlsx     Start + open workbook${NC}"
-    echo -e "    ${CYAN}excel --stop           Stop dev server${NC}"
-    echo -e "    ${CYAN}excel -m path.xml      Use custom manifest${NC}"
-    echo -e "    ${CYAN}excel --no-open        Server only${NC}"
+    echo -e "    ${CYAN}kuroagent                  Start dev server + sideload${NC}"
+    echo -e "    ${CYAN}kuroagent -f file.xlsx     Start + open workbook${NC}"
+    echo -e "    ${CYAN}kuroagent --stop           Stop dev server${NC}"
+    echo -e "    ${CYAN}kuroagent -m path.xml      Use custom manifest${NC}"
+    echo -e "    ${CYAN}kuroagent --no-open        Server only${NC}"
     echo -e ""
     echo -e "  Dev server runs on: ${CYAN}https://localhost:3000${NC}"
     echo -e "  Repo location:      ${CYAN}$INSTALL_DIR${NC}"

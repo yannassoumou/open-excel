@@ -65,7 +65,7 @@
     "webpack-dev-server": "5.1.0"
   },
   "bin": {
-    "excel": "./bin/excel"
+    "kuroagent": "./bin/kuroagent"
   },
   "prettier": "office-addin-prettier-config",
   "browserslist": [

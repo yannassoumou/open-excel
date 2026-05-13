@@ -1,7 +1,7 @@
 <#
 .SYNOPSIS
-    Installs KuroAgent Excel Add-in for development.
-    Installs Node/dependencies, registers the `excel` CLI, and verifies setup.
+    Installs kuroagent Excel Add-in for development.
+    Installs Node/dependencies, registers the `kuroagent` CLI, and verifies setup.
 
 .DESCRIPTION
     Downloads manifest from GitHub, installs npm deps, links the CLI.
@@ -23,7 +23,7 @@ param(
     [switch]$LocalOnly
 )
 
-$AddInName = "KuroAgent"
+$AddInName = "kuroagent"
 
 # --- Functions ---
 function Write-Step        { Write-Host "`n>>> $($args -join ' ')" -ForegroundColor Cyan }
@@ -41,7 +41,7 @@ if (Test-Path $PackageJsonPath) {
     $CloneDir = Join-Path $env:USERPROFILE ".kuroagent"
     if (-not (Test-Path $CloneDir)) {
         Write-Step "Cloning repository ..."
-        git clone https://github.com/yannassoumou/excel.git $CloneDir
+        git clone https://github.com/yannassoumou/kuroagent.git $CloneDir
         Write-Success "Cloned to $CloneDir"
     } else {
         Write-Step "Repository already cloned, pulling latest ..."
@@ -100,8 +100,8 @@ try {
     Write-Warning-C "Dev certs step returned non-zero (may already be installed)"
 }
 
-# --- Register the `excel` CLI ---
-Write-Step "Registering 'excel' CLI"
+# --- Register the `kuroagent` CLI ---
+Write-Step "Registering 'kuroagent' CLI"
 
 $NpmGlobalBin = & npm bin -g 2>$null
 if (-not $NpmGlobalBin) {
@@ -110,15 +110,15 @@ if (-not $NpmGlobalBin) {
 
 try {
     & npm link 2>$null | Out-Null
-    Write-Success "npm link -- excel CLI on PATH"
+    Write-Success "npm link -- kuroagent CLI on PATH"
 } catch {
     # Fallback: manual copy
     $BinDir = Join-Path $env:APPDATA "npm"
     if (-not (Test-Path $BinDir)) { New-Item -ItemType Directory -Path $BinDir -Force | Out-Null }
     # Create a wrapper .cmd that calls node
-    $CmdPath = Join-Path $BinDir "excel.cmd"
+    $CmdPath = Join-Path $BinDir "kuroagent.cmd"
     $NodePath = (Get-Command node).Source
-    $ExcelScript = Join-Path $RepoDir "bin\excel"
+    $ExcelScript = Join-Path $RepoDir "bin\kuroagent"
     Set-Content -Path $CmdPath -Value "@`"$NodePath`" `"$ExcelScript`" %*"
     Write-Success "Created CLI wrapper at $CmdPath"
     # Ensure APPDATA\npm is on PATH
@@ -131,11 +131,11 @@ try {
 
 # --- Verify ---
 Write-Step "Verifying installation"
-if (Get-Command excel -ErrorAction SilentlyContinue) {
-    Write-Success "excel CLI found: $(Get-Command excel).Source"
-    & excel --version
+if (Get-Command kuroagent -ErrorAction SilentlyContinue) {
+    Write-Success "kuroagent CLI found: $(Get-Command kuroagent).Source"
+    & kuroagent --version
 } else {
-    Write-Error-C "excel CLI not on PATH. Refresh terminal or add $NpmGlobalBin to PATH."
+    Write-Error-C "kuroagent CLI not on PATH. Refresh terminal or add $NpmGlobalBin to PATH."
     exit 1
 }
 
@@ -154,10 +154,10 @@ Write-Host "  $AddInName installed successfully" -ForegroundColor Green
 Write-Host "========================================" -ForegroundColor Green
 Write-Host ""
 Write-Host "  Quick start:" -ForegroundColor Cyan
-Write-Host "    excel                  Start dev server + sideload"
-Write-Host "    excel --stop           Stop dev server"
-Write-Host "    excel -m path\to.xml   Use custom manifest"
-Write-Host "    excel --no-open        Server only"
+Write-Host "    kuroagent                  Start dev server + sideload"
+Write-Host "    kuroagent --stop           Stop dev server"
+Write-Host "    kuroagent -m path\to.xml   Use custom manifest"
+Write-Host "    kuroagent --no-open        Server only"
 Write-Host "" -ForegroundColor Cyan
 Write-Host "  Dev server runs on: https://localhost:3000" -ForegroundColor Cyan
 Write-Host "  Repo location:        $RepoDir" -ForegroundColor Cyan

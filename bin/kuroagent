@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Excel CLI — KuroAgent dev server, sideload, update, and help
+ * KuroAgent CLI — dev server, sideload, update, and help
  *
  * The only command users need after install.ps1 / install.sh.
  * Works from any directory — finds the project automatically.
@@ -30,7 +30,7 @@ const originalCwd = process.cwd();
 //   1. EXCEL_HOME env var
 //   2. ~/.kuroagent (or USERPROFILE/.kuroagent on Windows)
 //   3. walk up from cwd looking for package.json or manifest.xml
-//   4. parent of this bin/excel script
+//   4. parent of this bin/kuroagent script
 function findProjectRoot() {
   // 1. EXCEL_HOME env var
   const envHome = process.env.EXCEL_HOME;
@@ -145,12 +145,12 @@ async function main() {
     printSideloadingInstructions(manifestPath, "Linux");
     if (!openFile) {
       log(`To open a workbook:`);
-      log(`  excel -f path/to/workbook.xlsx`);
+      log(`  kuroagent -f path/to/workbook.xlsx`);
     }
   }
 
   log(`\nKeep this terminal open for live reloading.`);
-  log(`To stop:  excel --stop`);
+  log(`To stop:  kuroagent --stop`);
 }
 
 // === UPDATE ===
@@ -188,7 +188,7 @@ function doUpdate() {
 
   // Re-link CLI
   try {
-    log(`Re-linking excel CLI ...`);
+    log(`Re-linking kuroagent CLI ...`);
     execSync(`npm link`, { cwd: repoDir, stdio: "pipe", shell: true });
     log(`CLI re-linked.`);
   } catch {
@@ -197,7 +197,7 @@ function doUpdate() {
 
   log(``);
   log(`${ADDIN_NAME} updated successfully.`);
-  log(`Run \`excel\` to start as usual.`);
+  log(`Run \\\`kuroagent\\\` to start as usual.`);
 }
 
 // === INSTALL (from anywhere) ===
@@ -213,13 +213,13 @@ function doInstall() {
     process.exit(1);
   }
   try {
-    log(`Linking excel CLI ...`);
+    log(`Linking kuroagent CLI ...`);
     execSync(`npm link`, { cwd: repoDir, stdio: "pipe", shell: true });
     log(`CLI linked.`);
   } catch {
     log(`[!] npm link returned non-zero`);
   }
-  log(`${ADDIN_NAME} ready. Run \`excel\` to start.`);
+  log(`${ADDIN_NAME} ready. Run \\`kuroagent\\` to start.`);
 }
 
 // === SERVER HELPERS ===
@@ -335,28 +335,28 @@ function printHelp() {
   console.log(`
   ${ADDIN_NAME} - AI assistant for Excel
 
-  One command does it all. After install, you only need "excel".
+  One command does it all. After install, you only need "kuroagent".
 
   USAGE
-    excel                       Start dev server, open Excel with KuroAgent
-    excel file.xlsx             Start + open the specified workbook
-    excel -f file.xlsx          Same as above (explicit file flag)
-    excel -m manifest.xml       Use a custom manifest path
-    excel --no-open             Start server only, don't open Excel
-    excel --stop                Stop the dev server on port 3000
-    excel --update              Pull latest from GitHub and refresh
-    excel --install             (Re)install Node dependencies (from any dir)
-    excel --version             Show KuroAgent version
-    excel --help                Show this help
+    kuroagent                     Start dev server, open Excel with KuroAgent
+    kuroagent file.xlsx           Start + open the specified workbook
+    kuroagent -f file.xlsx        Same as above (explicit file flag)
+    kuroagent -m manifest.xml     Use a custom manifest path
+    kuroagent --no-open           Start server only, don't open Excel
+    kuroagent --stop              Stop the dev server on port 3000
+    kuroagent --update            Pull latest from GitHub and refresh
+    kuroagent --install           (Re)install Node dependencies (from any dir)
+    kuroagent --version           Show KuroAgent version
+    kuroagent --help              Show this help
 
   WORKBOOK EXAMPLES
-    excel report.xlsx           Opens report.xlsx in the current directory
-    excel -f C:\\data\\sales.xlsx  Opens with absolute path
-    excel --no-open             Just starts the dev server in background
+    kuroagent report.xlsx         Opens report.xlsx in the current directory
+    kuroagent -f C:\\data\\sales.xlsx  Opens with absolute path
+    kuroagent --no-open           Just starts the dev server in background
 
   UPDATE WORKFLOW
-    excel --update              Pulls latest code, reinstalls deps, relinks CLI
-                                Run this whenever a new version is available.
+    kuroagent --update            Pulls latest code, reinstalls deps, relinks CLI
+                                  Run this whenever a new version is available.
 
   CONFIGURE LLM ENDPOINT
     Open the KuroAgent panel in Excel (Add-ins tab), then set:
@@ -404,7 +404,7 @@ function readFlag(args, names) {
 }
 
 function log(msg) {
-  console.log(`  [excel] ${msg}`);
+  console.log(`  [kuroagent] ${msg}`);
 }
 
 // === RUN ===
