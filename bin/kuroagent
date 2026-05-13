@@ -29,20 +29,27 @@ const originalCwd = process.cwd();
 // Strategy: try in order:
 //   1. EXCEL_HOME env var
 //   2. ~/.kuroagent (or USERPROFILE/.kuroagent on Windows)
-//   3. walk up from cwd looking for package.json or manifest.xml
-//   4. parent of this bin/kuroagent script
+//   3. ~/.kuroagent/manifest.dev.xml (open-source repo uses manifest.dev.xml)
+//   4. walk up from cwd looking for package.json or any manifest
+//   5. parent of this bin/kuroagent script
+function hasProjectFiles(dir) {
+  return fs.existsSync(path.join(dir, "manifest.xml")) ||
+         fs.existsSync(path.join(dir, "manifest.dev.xml")) ||
+         fs.existsSync(path.join(dir, "package.json"));
+}
+
 function findProjectRoot() {
   // 1. EXCEL_HOME env var
   const envHome = process.env.EXCEL_HOME;
-  if (envHome && fs.existsSync(path.join(envHome, "manifest.xml"))) {
+  if (envHome && hasProjectFiles(envHome)) {
     return path.resolve(envHome);
   }
 
-  // 2. ~/.kuroagent / %USERPROFILE%.kuroagent
+  // 2. ~/.kuroagent / %USERPROFILE%/.kuroagent
   const homeDir = process.env.USERPROFILE || process.env.HOME || os.homedir();
   if (homeDir) {
     const kuroagent = path.join(homeDir, ".kuroagent");
-    if (fs.existsSync(path.join(kuroagent, "manifest.xml"))) {
+    if (hasProjectFiles(kuroagent)) {
       return kuroagent;
     }
   }
@@ -50,19 +57,26 @@ function findProjectRoot() {
   // 3. walk up from cwd
   let dir = process.cwd();
   for (let i = 0; i < 20; i++) {
-    const pkg = path.join(dir, "package.json");
-    if (fs.existsSync(pkg)) {
-      try {
-        const data = JSON.parse(fs.readFileSync(pkg, "utf8"));
-        if (
-          (data.dependencies && data.dependencies["office-addin-debugging"]) ||
-          (data.devDependencies && data.devDependencies["office-addin-debugging"])
-        ) {
-          return dir;
-        }
-      } catch {}
+    if (hasProjectFiles(dir)) {
+      // Verify it's actually an add-in project
+      const pkg = path.join(dir, "package.json");
+      if (fs.existsSync(pkg)) {
+        try {
+          const data = JSON.parse(fs.readFileSync(pkg, "utf8"));
+          if (
+            (data.dependencies && data.dependencies["office-addin-debugging"]) ||
+            (data.devDependencies && data.devDependencies["office-addin-debugging"])
+          ) {
+            return dir;
+          }
+        } catch {}
+      }
+      // Fallback: has a manifest file = good enough
+      if (fs.existsSync(path.join(dir, "manifest.xml")) ||
+          fs.existsSync(path.join(dir, "manifest.dev.xml"))) {
+        return dir;
+      }
     }
-    if (fs.existsSync(path.join(dir, "manifest.xml"))) return dir;
     const parent = path.dirname(dir);
     if (parent === dir) break;
     dir = parent;
@@ -70,7 +84,7 @@ function findProjectRoot() {
 
   // 4. parent directory of this script
   const candidate = path.resolve(cliDir, "..");
-  if (fs.existsSync(path.join(candidate, "manifest.xml"))) return candidate;
+  if (hasProjectFiles(candidate)) return candidate;
 
   return null;
 }
@@ -391,7 +405,12 @@ function printVersion() {
     const version = fs.readFileSync(path.join(repoDir, "VERSION"), "utf8").trim();
     console.log(`${ADDIN_NAME} v${version}`);
   } catch {
-    console.log(`${ADDIN_NAME} (version file not found)`);
+    try {
+      const pkg = JSON.parse(fs.readFileSync(path.join(repoDir, "package.json"), "utf8"));
+      console.log(`${ADDIN_NAME} v${pkg.version || "unknown"}`);
+    } catch {
+      console.log(`${ADDIN_NAME}`);
+    }
   }
 }
 
