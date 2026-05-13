@@ -67,8 +67,24 @@ function Do-Install {
         Write-Step "Repository already exists at $InstallDir"
         Write-Step "Pulling latest changes ..."
         Set-Location $InstallDir
-        git pull origin master 2>&1 | Out-Null
+        # Check for unstaged changes that would block pull
+        $hasChanges = & git status --porcelain 2>&1 | Where-Object { $_ -ne '' }
+        if ($hasChanges) {
+            Write-Info "Local changes detected, stashing before pull"
+            git stash --include-untracked 2>&1 | Out-Null
+        }
+        $pullOut = & git pull origin master 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            # If pull failed (conflict), force reset to remote
+            Write-Info "Pull returned errors, resetting to remote"
+            git fetch origin master 2>&1 | Out-Null
+            git reset --hard FETCH_HEAD 2>&1 | Out-Null
+        }
         Write-Success "Repository updated"
+
+        # Force re-link: unlink old, link new
+        Write-Step "Refreshing global CLI link"
+        & npm uninstall -g excel-custom-functions-js 2>&1 | Out-Null
     } else {
         Write-Step "Cloning repository ..."
         git clone $RepoUrl $InstallDir 2>&1 | Out-Null
