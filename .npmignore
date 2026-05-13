@@ -1,0 +1,51 @@
+# Development-only files
+.agents/
+.claude/
+.crush/
+.qwen/
+.vscode/
+opencode.jsonc
+skills-lock.json
+
+# Source maps (not needed in production)
+*.map
+
+# Docs
+README-template.md
+ARCHITECTURE-PROPOSAL.md
+QWEN.md
+TELEMETRY-API.md
+AGENTS.md
+
+# Test files
+tests/
+test/
+*.test.js
+fixtures/
+
+# Dev configs
+babel.config.json
+tsconfig.json
+.eslintrc.json
+
+# Certificates
+*.crt
+*.key
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Environment
+.env*.local
+.env
+.env.local
+
+# Research data
+text_*.json
+analyze_errors.js
+test_agent.js
+test_excel_api_compat.js
