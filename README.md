@@ -1,195 +1,142 @@
-# KuroAgent — AI in Excel
+# open-excel — KuroAgent Local Dev
 
-> Chat with any LLM directly inside Excel. Automate your spreadsheets with natural language.
+Office Add-in for Excel with AI chat — local development package.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Excel](https://img.shields.io/badge/Excel-2016%2F365-blue)](https://www.office.com)
-[![Status](https://img.shields.io/badge/Status-Active-brightgreen)]()
-[![GitHub issues](https://img.shields.io/github/issues/yannassoumou/excel)](https://github.com/yannassoumou/excel/issues)
 
-## Features
+> This is the open-source local development mirror of KuroAgent.
+> Clone, install, and run against any OpenAI-compatible LLM (local or cloud).
 
-- **AI Chat in Excel** — Open the KuroAgent panel and chat with your LLM to automate Excel tasks
-- **60+ Excel Operations** — Create worksheets, write data, format cells, build charts, pivot tables, tables, conditional formatting, shapes, and more
-- **Multi-Provider Support** — OpenRouter, Anthropic Claude, Google Gemini, OpenAI GPT, or any OpenAI-compatible local LLM (Ollama, LM Studio, llama.cpp, vLLM)
-- **Smart JSON Parser** — Automatic JSON repair for malformed LLM responses (trailing commas, missing brackets, comments)
-- **Batch Execution** — 2-5 operations per batch with step-by-step progress tracking
-- **Custom Functions** — Use `=KUROAGENT("your prompt")` directly in Excel cells
-- **Session Telemetry** — Anonymous usage tracking for continuous improvement (opt-out available)
-- **Cross-Platform** — Works on Excel Desktop (Windows/Mac), Excel Online, and Excel for Linux
+## Quick Install
 
-## Installation
+### Windows
 
-### For Developers (One-Command Setup)
+```powershell
+iwr https://raw.githubusercontent.com/yannassoumou/open-excel/master/install.ps1 -OutFile install.ps1
+powershell -ExecutionPolicy Bypass -File .\install.ps1
+```
 
-This installs all dependencies and puts the `excel` CLI on your PATH:
+### Linux / macOS
 
-**Linux / Mac:**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/yannassoumou/excel/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/yannassoumou/open-excel/master/install.sh | bash
 ```
 
-**Windows:**
-```powershell
-iwr https://raw.githubusercontent.com/yannassoumou/excel/main/install.ps1 -OutFile install.ps1
-powershell -ExecutionPolicy Bypass -File .\install.ps1
+Both scripts install dependencies, generate HTTPS dev certs, and put the `excel` CLI on your PATH.
+
+### Manual Setup
+
+```bash
+git clone https://github.com/yannassoumou/open-excel.git
+cd open-excel
+npm install
+npx office-addin-dev-certs install
+npm link
 ```
-
-### For End Users (Just Want the Add-in in Excel)
-
-**Windows (registry sideloading, auto-load on startup):**
-```powershell
-iwr https://raw.githubusercontent.com/yannassoumou/excel/main/install.ps1 -OutFile install.ps1
-powershell -ExecutionPolicy Bypass -File .\install.ps1
-```
-Then restart Excel. Click the KuroAgent button in the ribbon to open the panel.
-
-**Linux / Mac / Excel Online (recommended):**
-1. Open [excel.office.com](https://excel.office.com)
-2. Open a blank workbook
-3. **Insert -> Get Add-ins -> Custom Add-ins**
-4. Load manifest from: `https://excel-ten-theta.vercel.app/manifest.xml`
 
 ## Developer CLI
 
-After running `install.sh`, the `excel` CLI is on your PATH. It replaces the old `npm run dev-server` workflow.
-
-### Quick Start
+After install, the `excel` CLI replaces `npm run dev-server`:
 
 ```bash
-# Start dev server + sideload
-excel
-
-# Use a custom manifest
-excel -m path/to/manifest.xml
-
-# Start server only (no Excel/browser)
-excel --no-open
-
-# Stop the dev server
-excel --stop
-
-# Full help
-excel --help
+excel                          # Start dev server + sideload taskpane
+excel -m path/to/manifest.xml  # Use a custom manifest
+excel --no-open                # Server only
+excel --stop                   # Stop dev server on port 3000
+excel --help                   # Full help
 ```
 
-### Commands
-
-| Command | What it does |
-|---------|-------------|
-| `excel` | Checks if dev server is running, starts it if not, waits for ready, opens Excel/browser |
-| `excel workbook.xlsx` | Same as above, plus records the workbook path |
-| `excel -m PATH` | Use a custom manifest instead of `manifest.dev.xml` |
-| `excel --no-open` | Start server only, skip sideload |
-| `excel --stop` | Kill the dev server on port 3000 |
-
-### Manual Dev (Without CLI)
-
-If you prefer the raw npm workflow:
-
-```bash
-git clone https://github.com/yannassoumou/excel.git
-cd excel
-npm install
-npm run dev-server        # webpack dev server (HTTPS localhost:3000)
-npm run start             # Build + launch Excel Desktop
-```
+The CLI starts the webpack server on `https://localhost:3000`, waits until it is ready, then opens Excel with the add-in sideloaded. Keep the terminal open for live reloading.
 
 ## Configuration
 
-Open the KuroAgent panel (HOME tab → **Open KuroAgent** button), then configure:
+Open the KuroAgent panel in Excel (Add-ins tab), then set:
 
 | Setting | Description | Default |
 |---------|-------------|---------|
 | **Endpoint** | LLM API URL | `https://openrouter.ai/api/v1/chat/completions` |
 | **Model** | Model name | `gpt-4` |
-| **API Key** | Bearer token (leave empty for local LLMs) | — |
+| **API Key** | Bearer token (empty for local LLMs) | — |
 
-### Supported Local LLM Endpoints
+### Local LLM Endpoints
 
-| Tool | Default URL |
-|------|-------------|
+| Tool | URL |
+|------|-----|
 | Ollama | `http://localhost:11434/v1/chat/completions` |
 | LM Studio | `http://localhost:1234/v1/chat/completions` |
-| llama.cpp | `http://localhost:8080/v1/chat/completions` |
+| llama.cpp | `http://localhost:8082/v1/chat/completions` |
 | vLLM | `http://localhost:8000/v1/chat/completions` |
-| text-generation-webui | `http://localhost:5000/v1/chat/completions` |
 
-## Excel Operations
+Any OpenAI-compatible `/v1/chat/completions` endpoint works.
 
-KuroAgent supports 60+ Excel operations across these categories:
+### Tailscale Remote LLM
 
-- **Worksheets**: create, delete, rename, copy, hide, show, protect, freeze panes
-- **Data**: write values, write formulas, read ranges, sort, delete rows/columns
-- **Formatting**: font, fill, borders, alignment, wrap, merge, autofit
-- **Tables**: create, delete, add rows/columns, sort, filter, style
-- **Charts**: add, delete, set title/series/position/legend/data labels
-- **PivotTables**: create, add hierarchies, set aggregation, layout, filters
-- **Conditional Formatting**: color scales, data bars, icon sets, text comparison
-- **Shapes**: add, delete, set text
-- **Data Validation**: add, delete rules
-- **Comments & Notes**: add, delete
-- **Named Ranges**: add, delete
-
-## Custom Functions
-
-Use AI directly in your cells:
+If your LLM runs on another machine on your Tailscale network, expose it with:
 
 ```
-=KUROAGENT("Summarize the trends in this data")
-=KUROAGENT("Translate to English", "fr→en")
-=KUROAGENT("Excel formula to calculate monthly growth")
+tailscale serve --bg --https=443 http://localhost:8082
 ```
+
+Then in KuroAgent set the endpoint to `https://<machine>.ts.net/v1/chat/completions`. Tailscale provides TLS so Excel Online won't block with mixed content errors.
+
+## Excel Online (No Install)
+
+1. Open [excel.office.com](https://excel.office.com)
+2. Open a blank workbook
+3. **Insert -> Get Add-ins -> Custom Add-ins**
+4. Load manifest from your running dev server: `https://localhost:3000/manifest.xml`
+
+## Features
+
+- **AI Chat** — chat with any LLM inside Excel
+- **60+ operations** — write values/formulas, format cells, build charts, pivot tables, tables, conditional formatting, shapes, data validation, comments, named ranges
+- **JSON auto-repair** — handles malformed LLM responses automatically
+- **Batch execution** — 2-5 operations per round with progress tracking
+- **Custom Functions** — `=KUROAGENT("your prompt")` in cells
+- **Multi-sheet context** — reads workbook structure for smarter LLM answers
 
 ## Architecture
 
-```
-User → Chat UI → LLM (streaming) → JSON Parser → Operation Validator → Excel API
-                ↑                                              ↓
-                └──── Context (sheet data) ←───────────────────┘
-```
+- `src/taskpane/agentChat.js` — orchestrator + execution loop
+- `src/taskpane/agent/ai.js` — SSE streaming to OpenAI-compatible APIs
+- `src/taskpane/agent/parser.js` — JSON extraction + repair
+- `src/taskpane/agent/operations.js` — 60+ operation registry + executor
+- `src/taskpane/agent/prompts.js` — system prompt architecture
+- `src/taskpane/excel/context.js` — workbook state reading
+- `src/taskpane/ui/chat.js` — chat rendering, collapsible step groups
 
-- **Agent Orchestrator** (`src/taskpane/agentChat.js`) — State management, execution loop
-- **AI Module** (`src/taskpane/agent/ai.js`) — SSE streaming chat completions
-- **Parser** (`src/taskpane/agent/parser.js`) — JSON extraction with automatic repair
-- **Operations** (`src/taskpane/agent/operations.js`) — 60+ operation registry + executor
-- **Prompts** (`src/taskpane/agent/prompts.js`) — 3-layer system prompt architecture
-- **Context** (`src/taskpane/excel/context.js`) — Workbook state reading (sheets, tables, charts)
-- **UI** (`src/taskpane/ui/chat.js`) — Chat rendering with collapsible step groups
-- **Telemetry** (`src/taskpane/telemetry.js`) — Anonymous session tracking
-
-## Build & Development
+## Build Commands
 
 ```bash
-npm install              # Install dependencies
-excel                    # Start everything (replaces npm run dev-server)
-npm run build            # Production build → dist/
-npm run start            # Build + launch Excel Desktop for debugging
-npm run start:web        # Debug in Excel on the web
+npm run build            # production build to dist/
+npm run dev-server       # webpack dev server on https://localhost:3000
+npm run start            # build + launch Excel Desktop (Windows)
+npm run start:web        # build + launch in browser
 npm run lint             # ESLint check
-npm run test             # Run test suite
-npm run validate         # Validate manifest.xml
+npm run test             # run tests
+npm run validate         # validate manifest.xml
 ```
 
-## Project Status
+## Uninstall
 
-| Component | Status |
-|-----------|--------|
-| Excel Add-in | **Active** — Fully functional |
-| PowerPoint Add-in | **In Development** — Architecture designed, not yet released |
-| Custom Functions | **Active** — `=KUROAGENT()` works in cells |
-| Telemetry Dashboard | **Active** — Separate repo |
+### Windows
 
-> **Note:** The PowerPoint add-in is still in development. Only the Excel add-in is available in this release.
+```powershell
+iwr https://raw.githubusercontent.com/yannassoumou/open-excel/master/uninstall.ps1 -OutFile uninstall.ps1
+powershell -ExecutionPolicy Bypass -File .\uninstall.ps1
+```
+
+### Linux / macOS
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/yannassoumou/open-excel/master/uninstall.sh | bash
+```
 
 ## License
 
-MIT License — see [LICENSE](LICENSE) for details.
+MIT -- see [LICENSE](LICENSE)
 
 ## Author
 
-**Yann Assoumou** — [GitHub](https://github.com/yannassoumou)
-
-## Acknowledgments
-
-Built on the [Microsoft Office Add-in template](https://github.com/OfficeDev/Excel-Custom-Functions-JS). Uses [Office.js](https://learn.microsoft.com/en-us/office/dev/add-ins/reference/office-js/), [Fluent UI](https://developer.microsoft.com/en-us/fluentui#/), and [Webpack 5](https://webpack.js.org/).
+**Yann Assoumou** -- [GitHub](https://github.com/yannassoumou)
