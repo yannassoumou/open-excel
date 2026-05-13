@@ -107,6 +107,7 @@ do_install() {
 
     # Register CLI
     print_step "Registering 'kuroagent' CLI"
+    chmod +x "$INSTALL_DIR/bin/kuroagent" 2>/dev/null || true
     LINKED=false
     if npm link 2>/dev/null; then
         print_success "npm link -- kuroagent CLI on PATH"
@@ -178,6 +179,7 @@ do_update() {
     # Re-link
     print_step "Re-linking kuroagent CLI"
     if npm link 2>/dev/null; then
+    chmod +x "$INSTALL_DIR/bin/kuroagent" 2>/dev/null || true
         print_success "CLI re-linked"
     else
         print_warning "npm link failed, using symlink fallback"
