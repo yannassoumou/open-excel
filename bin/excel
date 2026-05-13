@@ -23,6 +23,10 @@ import { fileURLToPath } from "url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Save original cwd BEFORE any path manipulation so we can resolve
+// user-provided workbook paths relative to where they ran the command.
+const originalCwd = process.cwd();
+
 const ADDIN_NAME = "KuroAgent";
 const HOST_NAME = "Excel";
 const DEFAULT_PORT = 3000;
@@ -234,7 +238,12 @@ function windowsSideload(manifest, workbookPath) {
     let cmd;
     const manifestFile = `"${manifest}"`;
     if (workbookPath) {
-      const absPath = path.resolve(workbookPath);
+      // Resolve relative to the ORIGINAL working directory, not the project root.
+      // Users often run `excel` from their Documents/Desktop, not from .kuroagent.
+      let absPath = path.resolve(originalCwd, workbookPath);
+      if (!fs.existsSync(absPath)) {
+        absPath = path.resolve(repoDir, workbookPath);
+      }
       if (fs.existsSync(absPath)) {
         log(`Workbook: ${absPath}`);
         cmd = `npx office-addin-debugging start ${manifestFile} desktop --document "${absPath}"`;
