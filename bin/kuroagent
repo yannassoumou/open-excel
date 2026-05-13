@@ -146,7 +146,18 @@ async function main() {
   log(`Dev server ready at ${DEV_URL}`);
 
   if (!noOpen) {
-    printSideloadingInstructions(manifestPath, "Linux");
+    // On macOS, try to open the workbook directly in Excel Desktop
+    if (platform === "darwin" && openFile) {
+      let absPath = path.resolve(originalCwd, openFile);
+      if (!fs.existsSync(absPath)) absPath = path.resolve(repoDir, openFile);
+      if (fs.existsSync(absPath)) {
+        log(`Opening workbook in Excel: ${absPath}`);
+        try { execSync(`open -a "Microsoft Excel" "${absPath}"`, { stdio: "pipe" }); } catch {}
+      } else {
+        log(`[!] File not found: ${openFile}`);
+      }
+    }
+    printSideloadingInstructions(manifestPath);
     if (!openFile) {
       log(`To open a workbook:`);
       log(`  kuroagent -f path/to/workbook.xlsx`);
