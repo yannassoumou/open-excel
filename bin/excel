@@ -224,9 +224,9 @@ function stopServer() {
 // --- platform sideload ---
 
 function windowsSideload(manifest, workbookPath) {
-  log(`Opening Excel (registry sideload already configured by install.ps1) ...`);
+  log(`Opening Excel (registry sideload already configured) ...`);
   try {
-    // Find Excel.exe — it lives in Program Files or Program Files (x86)
+    // Find Excel.exe
     const paths = [
       "C:\\Program Files\\Microsoft Office\\root\\Office16\\EXCEL.EXE",
       "C:\\Program Files (x86)\\Microsoft Office\\root\\Office16\\EXCEL.EXE",
@@ -237,31 +237,29 @@ function windowsSideload(manifest, workbookPath) {
       if (fs.existsSync(p)) { excelExe = p; break; }
     }
 
-    const args = [];
     if (workbookPath) {
       const absPath = path.resolve(workbookPath);
       if (!fs.existsSync(absPath)) {
         log(`[!] File not found: ${absPath}`);
       } else {
-        args.push(`"${absPath}"`);
         log(`Workbook: ${absPath}`);
+        if (excelExe) {
+          execSync(`start "" "${excelExe}" "${absPath}"`, { shell: true });
+        } else {
+          // Open with default app (should be Excel)
+          execSync(`start "" "${absPath}"`, { shell: true });
+        }
       }
-    }
-
-    if (!excelExe) {
-      // Try via start command (asks Windows to find Excel)
-      if (args.length > 0) {
-        execSync(`start excel.exe ${args.join(" ")}`, { shell: true });
+    } else {
+      if (excelExe) {
+        execSync(`start "" "${excelExe}"`, { shell: true });
       } else {
         execSync(`start excel.exe`, { shell: true });
       }
-      log(`Excel opened. The add-in should appear if registry sideload is configured.`);
-    } else {
-      spawn(JSON.stringify(excelExe), args, { detached: true, stdio: "ignore", shell: true });
-      log(`Excel opened via registry sideload.`);
     }
+    log(`Excel opened. The add-in should appear on next startup.`);
   } catch (err) {
-    log(`[!!] Could not open Excel automatically.`);
+    log(`[!!] Could not open Excel automatically: ${err.message}`);
     log(`    Please sideload manually: Add-ins -> Custom Add-ins -> ${manifest}`);
   }
 }
