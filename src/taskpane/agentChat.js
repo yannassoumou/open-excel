@@ -2168,7 +2168,65 @@ async function handleSend() {
       } catch (e) {
         // Non-critical
       }
-      return;
+
+      // Retry once with validation errors sent back to the model
+      console.log("[plan] Validation errors — retrying with fix request...");
+      const fixMessages = [
+        ...apiMessages,
+        { role: "assistant", content: planResponse },
+        {
+          role: "user",
+          content:
+            "Your operations failed validation. Please fix the following issues and respond with a corrected ```json block:\n" +
+            validationErrors.join("\n") +
+            "\n\nEnsure each operation has ALL required fields with correct types. Respond with ONLY the corrected JSON block.",
+        },
+      ];
+
+      try {
+        const fixResponse = await streamFromAI(
+          fixMessages,
+          () => isStopped,
+          undefined,
+          (text, isComplete) => {
+            if (isComplete) {
+              stream.complete();
+            } else {
+              stream.update(text);
+            }
+          }
+        );
+        if (fixResponse) {
+          const retryOps = extractOperations(fixResponse);
+          if (retryOps && retryOps.operations.length > 0) {
+            const { valid: retryValidOps, errors: retryErrors } = validateOperations(
+              retryOps.operations,
+              registry,
+              currentMode
+            );
+            if (retryErrors.length === 0) {
+              console.log("[plan] Validation retry succeeded —", retryValidOps.length, "operations");
+              finalOps = retryOps;
+              planResponse = fixResponse;
+            } else {
+              console.warn("[plan] Validation retry also failed:", retryErrors);
+              stream.element.remove();
+              appendMessage("agent", `⚠ Retry failed: ${retryErrors.join("; ")}`);
+              return;
+            }
+          } else {
+            console.warn("[plan] Retry produced no operations");
+            stream.element.remove();
+            appendMessage("agent", "⚠ Retry produced no valid operations.");
+            return;
+          }
+        }
+      } catch (retryError) {
+        console.error("[plan] Validation retry error:", retryError);
+        stream.element.remove();
+        appendMessage("agent", `⚠ Retry failed: ${retryError.message || String(retryError)}`);
+        return;
+      }
     }
 
     // Phase 2: Execute operations loop
