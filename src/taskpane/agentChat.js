@@ -510,8 +510,8 @@ Please generate new structured operations to incorporate this improvement. Outpu
     conversationHistory: [...conversationHistory],
     sheetContext,
     systemPrompt,
-    aiModel: configuredModel,
-    aiEndpoint: configuredEndpoint,
+    aiModel: getConfig().model,
+    aiEndpoint: getConfig().endpoint,
     phase: "improvement",
   });
   feedbackTotalSteps++;
@@ -803,8 +803,8 @@ async function executeOperationsLoop(initialOps, initialContext, systemPrompt) {
       conversationHistory: [...conversationHistory],
       sheetContext,
       systemPrompt,
-      aiModel: configuredModel,
-      aiEndpoint: configuredEndpoint,
+      aiModel: getConfig().model,
+      aiEndpoint: getConfig().endpoint,
       phase: "execution",
       consecutiveFailures: consecutiveFailures,
     });
@@ -1913,8 +1913,8 @@ async function handleSend() {
         })),
         sheetContext,
         systemPrompt,
-        aiModel: configuredModel,
-        aiEndpoint: configuredEndpoint,
+        aiModel: getConfig().model,
+        aiEndpoint: getConfig().endpoint,
         phase: "planning",
         consecutiveFailures: consecutiveFailures,
       });
@@ -2045,8 +2045,8 @@ async function handleSend() {
         })),
         sheetContext,
         systemPrompt,
-        aiModel: configuredModel,
-        aiEndpoint: configuredEndpoint,
+        aiModel: getConfig().model,
+        aiEndpoint: getConfig().endpoint,
         phase: "planning",
         retryCount: ops && ops.operations.length === 0 ? 1 : 0,
       });
@@ -2103,8 +2103,8 @@ async function handleSend() {
         })),
         sheetContext,
         systemPrompt,
-        aiModel: configuredModel,
-        aiEndpoint: configuredEndpoint,
+        aiModel: getConfig().model,
+        aiEndpoint: getConfig().endpoint,
         phase: "planning",
       });
 
@@ -2157,8 +2157,8 @@ async function handleSend() {
         })),
         sheetContext,
         systemPrompt,
-        aiModel: configuredModel,
-        aiEndpoint: configuredEndpoint,
+        aiModel: getConfig().model,
+        aiEndpoint: getConfig().endpoint,
         phase: "planning",
       });
 
@@ -2199,8 +2199,8 @@ async function handleSend() {
         : [],
       sheetContext: sheetContext || "",
       systemPrompt: systemPrompt || "",
-      aiModel: configuredModel,
-      aiEndpoint: configuredEndpoint,
+      aiModel: getConfig().model,
+      aiEndpoint: getConfig().endpoint,
       phase: "planning",
     });
   } finally {
