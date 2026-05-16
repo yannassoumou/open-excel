@@ -29,6 +29,7 @@ import {
   appendExecutionResult,
   showWelcome,
   scrollChatToBottom,
+  setExecutingState,
   escapeHtml,
   appendStreamingMessage,
   finalizeStepGroup,
@@ -200,6 +201,12 @@ let isStopped = false;
 let currentMode = localStorage.getItem("agentMode") || "interactive";
 let pendingImageBase64 = null;
 
+let consecutiveFailures = 0;
+const MAX_CONSECUTIVE_FAILURES = 3;
+
+let noOpsRetries = 0;
+const MAX_NO_OPS_RETRIES = 2;
+
 // Step tracking for retry/revert buttons
 let stepStack = []; // [{stepNumber, plan, operations, resultEl, hadError, feedback, snapshotBefore}]
 
@@ -261,6 +268,20 @@ function resetForNextTask() {
   initTelemetry();
   clearChatUI(showWelcome);
   resetStepGroup();
+}
+
+function acknowledgeCompletion() {
+  const messagesContainer = document.getElementById("chat-messages");
+  if (!messagesContainer) return;
+  
+  const feedbackGroup = messagesContainer.querySelector(".agent-feedback-group");
+  if (feedbackGroup) feedbackGroup.style.display = "none";
+  
+  const improveArea = messagesContainer.querySelector(".agent-improve-area");
+  if (improveArea) improveArea.style.display = "none";
+  
+  isExecuting = false;
+  isStopped = false;
 }
 
 // ─── Retry / Revert ─────────────────────────────────────────────────────────
@@ -383,20 +404,20 @@ Please generate new structured operations to incorporate this improvement. Outpu
       }
       conversationHistory.push({ role: "assistant", content: retryResponse });
       const retryOps = extractOperations(retryResponse);
-      if (!retryOps || retryOps.operations.length === 0) {
-        appendMessage("agent", `ℹ ${improveResponse.substring(0, 300)}`);
-        submitFeedback("improve", comment, { ...taskStats, improvementApplied: false });
-        resetForNextTask();
-        return;
-      }
-      improveOps = retryOps;
-    } else {
-      appendMessage("agent", `ℹ ${improveResponse.substring(0, 300)}`);
-      submitFeedback("improve", comment, { ...taskStats, improvementApplied: false });
-      resetForNextTask();
-      return;
-    }
-  }
+       if (!retryOps || retryOps.operations.length === 0) {
+         appendMessage("agent", `ℹ ${improveResponse.substring(0, 300)}`);
+         submitFeedback("improve", comment, { ...taskStats, improvementApplied: false });
+         acknowledgeCompletion();
+         return;
+       }
+       improveOps = retryOps;
+     } else {
+       appendMessage("agent", `ℹ ${improveResponse.substring(0, 300)}`);
+       submitFeedback("improve", comment, { ...taskStats, improvementApplied: false });
+       acknowledgeCompletion();
+       return;
+     }
+   }
 
   console.log("[improve] Executing", improveOps.operations.length, "improvement operations");
   appendMessage(
@@ -431,12 +452,12 @@ Please generate new structured operations to incorporate this improvement. Outpu
 
   const improveTiming = Date.now() - improveStepStart;
 
-  if (improveHadError) {
-    appendMessage("agent", `❌ Some improvements failed: ${improveResults.join("\n")}`);
-    submitFeedback("improve", comment, { ...taskStats, improvementApplied: false });
-    resetForNextTask();
-    return;
-  }
+ if (improveHadError) {
+     appendMessage("agent", `❌ Some improvements failed: ${improveResults.join("\n")}`);
+     submitFeedback("improve", comment, { ...taskStats, improvementApplied: false });
+     acknowledgeCompletion();
+     return;
+   }
 
   const actualNames = getHostExtractNamesFn()(improveResults, improveOps.operations);
   const improvementVerification = await getHostVerifyFn()(improveOps.operations, actualNames);
@@ -476,17 +497,17 @@ Please generate new structured operations to incorporate this improvement. Outpu
   const lastBubble = messagesContainer.querySelector(
     ".agent-message.agent:last-child .agent-bubble"
   );
-  if (lastBubble) {
-    appendFeedbackButtons(lastBubble, {
-      onOk: () => {
-        submitFeedback("ok", comment, { ...taskStats, improvementApplied: true });
-        resetForNextTask();
-      },
-      onBad: () => {
-        submitFeedback("bad", comment, { ...taskStats, improvementApplied: true });
-        resetForNextTask();
-      },
-      onImprove: (newComment) => {
+    if (lastBubble) {
+       appendFeedbackButtons(lastBubble, {
+         onOk: () => {
+           submitFeedback("ok", comment, { ...taskStats, improvementApplied: true });
+           acknowledgeCompletion();
+         },
+         onBad: () => {
+           submitFeedback("bad", comment, { ...taskStats, improvementApplied: true });
+           acknowledgeCompletion();
+         },
+         onImprove: (newComment) => {
         handleImprove(newComment, { ...taskStats, improvementApplied: true });
       },
     });
@@ -556,24 +577,22 @@ CRITICAL: Do NOT pass validation unless each requirement is verified.`,
       ];
 
       const validationResult = await streamFromAI(validationMessages, () => isStopped);
-      if (validationResult) {
-        const jsonMatch = validationResult.match(/```(?:json)?\s*[\r\n]+([\s\S]*?)```/);
-        let parsedResult;
-        try {
-          parsedResult = jsonMatch
-            ? JSON.parse(jsonMatch[1].trim())
-            : JSON.parse(validationResult.trim());
-        } catch {
-          parsedResult = { validated: true, issues: [], summary: validationResult };
-        }
+if (validationResult) {
+     const jsonMatch = validationResult.match(/```(?:json)?\s*[\r\n]+([\s\S]*?)```/);
+     let parsedResult;
+     try {
+       parsedResult = jsonMatch
+         ? JSON.parse(jsonMatch[1].trim())
+         : JSON.parse(validationResult.trim());
+     } catch {
+       parsedResult = { validated: true, issues: [], summary: validationResult };
+     }
 
-        if (parsedResult.validated && parsedResult.issues.length === 0) {
-          appendMessage("agent", `✅ ${parsedResult.summary || "Verified and complete!"}`);
-          conversationHistory = [];
-          stepStack = [];
-          originalQuery = "";
-          return;
-        } else {
+     if (parsedResult.validated && parsedResult.issues.length === 0) {
+       appendMessage("agent", `✅ ${parsedResult.summary || "Verified and complete!"}`);
+       acknowledgeCompletion();
+       return;
+     } else {
           const issuesText =
             parsedResult.issues.length > 0
               ? parsedResult.issues.join(", ")
@@ -602,14 +621,12 @@ CRITICAL: Do NOT pass validation unless each requirement is verified.`,
             return;
           }
         }
-      } else {
-        appendMessage("agent", "⚠ Validation skipped.");
-        conversationHistory = [];
-        stepStack = [];
-        originalQuery = "";
-        return;
-      }
-    }
+    } else {
+         appendMessage("agent", "⚠ Validation skipped.");
+         acknowledgeCompletion();
+         return;
+       }
+   }
     appendMessage("agent", "⚠ No operations found. Asking to continue...");
     const retryFeedback =
       "Your last response did not contain structured operations. Please provide the next step as structured operations, or say 'All steps complete.' if done.";
@@ -692,10 +709,20 @@ async function executeOperationsLoop(initialOps, initialContext, systemPrompt) {
     let feedback;
     let verification = "";
     if (hadError) {
-      feedback = `Some operations failed: ${resultText}. Adapt and provide corrected operations.`;
+      consecutiveFailures++;
+      if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+        appendMessage("agent", `❌ ${MAX_CONSECUTIVE_FAILURES} consecutive failures. Stopping to avoid wasted API calls.`);
+        appendMessage("agent", "Please try again or describe the issue more specifically.");
+        conversationHistory = [];
+        stepStack = [];
+        originalQuery = "";
+        break;
+      }
+      feedback = `Some operations failed: ${resultText}. Adapt and provide corrected operations. (Failure ${consecutiveFailures}/${MAX_CONSECUTIVE_FAILURES})`;
       console.log(`[step:${stepNumber}] Feedback sent (error):`, feedback);
       conversationHistory.push({ role: "user", content: feedback });
     } else {
+      consecutiveFailures = 0;
       const opField = currentHost === "powerpoint" ? "slide" : "sheet";
       const actualNames = getHostExtractNamesFn()(results, validOps);
       verification = await getHostVerifyFn()(validOps, actualNames);
@@ -963,21 +990,21 @@ Provide a clear summary of what was done.`,
               scrollChatToBottom();
 
               const bubbleEl = summaryEl.querySelector(".agent-bubble");
-              appendFeedbackButtons(bubbleEl, {
-                onOk: () => {
-                  submitFeedback("ok", "", taskStats);
-                  console.log("[telemetry] User rated: OK");
-                  resetForNextTask();
-                },
-                onBad: () => {
-                  submitFeedback("bad", "", taskStats);
-                  console.log("[telemetry] User rated: Bad");
-                  resetForNextTask();
-                },
-                onImprove: (comment) => {
-                  handleImprove(comment, taskStats);
-                },
-              });
+               appendFeedbackButtons(bubbleEl, {
+                 onOk: () => {
+                   submitFeedback("ok", "", taskStats);
+                   console.log("[telemetry] User rated: OK");
+                   acknowledgeCompletion();
+                 },
+                 onBad: () => {
+                   submitFeedback("bad", "", taskStats);
+                   console.log("[telemetry] User rated: Bad");
+                   acknowledgeCompletion();
+                 },
+                 onImprove: (comment) => {
+                   handleImprove(comment, taskStats);
+                 },
+               });
             }
 
             // Don't reset yet — wait for feedback
@@ -1043,21 +1070,26 @@ Provide a clear summary of what was done.`,
               break;
             }
           }
-        } else {
-          appendMessage("agent", "⚠ Validation skipped — no response from validator.");
-          conversationHistory = [];
-          stepStack = [];
-          originalQuery = "";
-          break;
-        }
-        break;
-      }
+      } else {
+           appendMessage("agent", "⚠ Validation skipped — no response from validator.");
+           acknowledgeCompletion();
+           break;
+         }
+         break;
+       }
 
-      // No operations — ask for clarification
-      appendMessage("agent", "⚠ No operations found. Asking to continue...");
-      const retryFeedback =
-        "Your last response did not contain structured operations. Please provide the next step as structured operations, or say 'All steps complete.' if done.";
-      conversationHistory.push({ role: "user", content: retryFeedback });
+       // No operations — ask for clarification
+       noOpsRetries++;
+       if (noOpsRetries > MAX_NO_OPS_RETRIES) {
+         appendMessage("agent", "⚠ I've tried multiple times but can't determine the next steps. Would you like to describe what to do next?");
+         isExecuting = false;
+         sendButton.disabled = false;
+         return;
+       }
+       appendMessage("agent", "⚠ No operations found. Asking to continue...");
+       const retryFeedback =
+         "Your last response did not contain structured operations. Please provide the next step as structured operations, or say 'All steps complete.' if done.";
+       conversationHistory.push({ role: "user", content: retryFeedback });
 
       const retryResponse = await streamFromAI(
         [
@@ -1076,13 +1108,15 @@ Provide a clear summary of what was done.`,
         break;
       }
 
-      validOps.length = 0;
-      validOps.push(...retryOps.operations);
-    } else {
-      validOps.length = 0;
-      validOps.push(...nextOps.operations);
-    }
-  }
+     validOps.length = 0;
+       validOps.push(...retryOps.operations);
+       noOpsRetries = 0;
+     } else {
+       validOps.length = 0;
+       validOps.push(...nextOps.operations);
+       noOpsRetries = 0;
+     }
+   }
 
   finalizeStepGroup();
 }
@@ -1328,6 +1362,19 @@ export async function initAgentChat() {
       }
     }
 
+    // Preset models shown as fallback before API discovery
+    const PRESET_MODELS = [
+      "nvidia/nemotron-3-super-120b-a12b:free",
+      "openai/gpt-4",
+      "openai/gpt-4o",
+      "google/gemini-2.5-pro-preview-05-06",
+      "meta-llama/llama-3.3-70b-instruct",
+      "mistralai/mistral-large-2-instruct",
+      "deepseek/deepseek-chat",
+      "nousresearch/hermes-3-llama-3.1-70b",
+      "local-model",
+    ];
+
     async function discoverModels() {
       if (modelFetchAbort) {
         modelFetchAbort.abort();
@@ -1351,14 +1398,25 @@ export async function initAgentChat() {
         if (modelFetchAbort.signal.aborted) return;
 
         if (models.length > 0) {
-          // Build datalist from discovered models only
+          // Build datalist: presets + discovered models (no duplicates)
           const datalist = document.getElementById("model-suggestions");
           if (datalist) {
             datalist.innerHTML = "";
-            models.forEach((m) => {
+
+            // Add presets first (only if not already in discovered models)
+            PRESET_MODELS.forEach((v) => {
               const opt = document.createElement("option");
-              opt.value = m;
+              opt.value = v;
               datalist.appendChild(opt);
+            });
+
+            // Add discovered models (avoid duplicates with presets)
+            models.forEach((m) => {
+              if (!PRESET_MODELS.includes(m)) {
+                const opt = document.createElement("option");
+                opt.value = m;
+                datalist.appendChild(opt);
+              }
             });
 
             showModelCount(models.length);
@@ -1380,12 +1438,14 @@ export async function initAgentChat() {
       modelDiscoverTimer = setTimeout(discoverModels, 500);
     }
 
-    if (endpointInput) {
-      endpointInput.addEventListener("change", () => {
-        setAiConfig({ endpoint: endpointInput.value.trim() });
-        scheduleModelDiscover();
-      });
-    }
+   if (endpointInput) {
+       endpointInput.addEventListener("change", () => {
+         setAiConfig({ endpoint: endpointInput.value.trim() });
+         // Clear model when endpoint changes
+         if (modelInput) modelInput.value = "";
+         scheduleModelDiscover();
+       });
+     }
 
     if (modelInput) {
       modelInput.addEventListener("change", () => {
@@ -1531,13 +1591,13 @@ export async function initAgentChat() {
 
     // ─── Config Toggle & Auto-Deflate ────────────────────────────────────────
 
-    const configBar = document.getElementById("agent-config");
-    const configToggle = document.getElementById("config-toggle");
-    let configExpanded = localStorage.getItem("agentConfigExpanded");
-    if (configExpanded === null) configExpanded = false; // Default to collapsed
-    configExpanded = configExpanded === "true";
-    let autoDeflateTimer = null;
-    const AUTO_DEFDELAY = 15000; // 15 seconds
+   const configBar = document.getElementById("agent-config");
+     const configToggle = document.getElementById("config-toggle");
+     let configExpanded = localStorage.getItem("agentConfigExpanded");
+     if (configExpanded === null) configExpanded = true; // Show on first visit
+     configExpanded = configExpanded === "true";
+     let autoDeflateTimer = null;
+     const AUTO_DEFDELAY = 60000; // 60 seconds
 
     function setConfigState(expanded) {
       configExpanded = expanded;
@@ -1572,14 +1632,21 @@ export async function initAgentChat() {
     }
 
     // Pause auto-deflate on any config interaction
-    const configInputs = configBar ? configBar.querySelectorAll("input, button") : [];
-    configInputs.forEach((input) => {
-      input.addEventListener("focus", () => {
-        if (!configExpanded) setConfigState(true);
-        resetAutoDeflate();
-      });
-      input.addEventListener("blur", () => resetAutoDeflate());
-    });
+     const configInputs = configBar ? configBar.querySelectorAll("input, button") : [];
+     configInputs.forEach((input) => {
+       input.addEventListener("focus", () => {
+         if (!configExpanded) setConfigState(true);
+         resetAutoDeflate();
+       });
+       input.addEventListener("blur", () => {
+         // Only auto-deflate when focus leaves the entire config area
+         setTimeout(() => {
+           if (configExpanded && !configBar.contains(document.activeElement)) {
+             resetAutoDeflate();
+           }
+         }, 100);
+       });
+     });
 
     // Pause auto-deflate during execution, resume after
     const originalIsExecuting = { value: false };
@@ -1664,13 +1731,11 @@ async function handleSend() {
   }
 
   isExecuting = true;
-  isStopped = false;
+   setExecutingState(true);
+   isStopped = false;
   const sendButton = document.getElementById("chat-send");
   const stopButton = document.getElementById("chat-stop");
   if (sendButton) sendButton.disabled = true;
-
-  // Declare stream before the try block so catch/finally can access it
-  let stream = null;
 
   try {
     if (stopButton) stopButton.style.display = "inline-block";
@@ -1692,7 +1757,7 @@ async function handleSend() {
       apiMessages.length
     );
 
-    stream = appendStreamingMessage();
+    const stream = appendStreamingMessage();
     let planResponse = "";
 
     try {
@@ -1709,12 +1774,12 @@ async function handleSend() {
         }
       );
     } catch (error) {
-      stream?.element?.remove();
+      stream.element.remove();
       appendMessage("agent", `Error: ${error.message || String(error)}`);
       return;
     }
 
-    if (!planResponse && stream?.element && !stream.element.querySelector(".agent-bubble").innerHTML) {
+    if (!planResponse && !stream.element.querySelector(".agent-bubble").innerHTML) {
       stream.element.remove();
       if (isStopped) {
         appendMessage("agent", "⏹ Execution stopped.");
@@ -1915,11 +1980,12 @@ async function handleSend() {
     console.error("[agentChat] handleSend error:", error);
     stream?.element?.remove();
     appendMessage("agent", `Error: ${error.message || String(error)}`);
-  } finally {
-    isExecuting = false;
-    isStopped = false;
-    if (sendButton) sendButton.disabled = false;
-    if (stopButton) stopButton.style.display = "none";
-    chatInput.focus();
-  }
+ } finally {
+     isExecuting = false;
+     setExecutingState(false);
+     isStopped = false;
+     if (sendButton) sendButton.disabled = false;
+     if (stopButton) stopButton.style.display = "none";
+     chatInput.focus();
+   }
 }

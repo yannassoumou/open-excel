@@ -172,10 +172,22 @@ export function renderMarkdown(text) {
 
 /**
  * Scroll chat to bottom only if user is already near the bottom.
+ * During active execution, always scrolls to bottom.
  */
+let isExecuting = false;
+export function setExecutingState(executing) {
+  isExecuting = executing;
+}
+
 export function scrollChatToBottom() {
   const messagesContainer = document.getElementById("chat-messages");
   if (!messagesContainer) return;
+  
+  if (isExecuting) {
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    return;
+  }
+  
   const isNearBottom =
     messagesContainer.scrollHeight - messagesContainer.scrollTop - messagesContainer.clientHeight <
     150;

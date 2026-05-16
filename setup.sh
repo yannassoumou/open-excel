@@ -2,7 +2,7 @@
 # setup.sh - Unified setup for kuroagent Excel Add-in
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/yannassoumou/open-excel/master/setup.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/yannassoumou/open-kuroagent/master/setup.sh | bash
 #   # OR from local:
 #   ./setup.sh              # Interactive menu
 #   ./setup.sh install      # First-time install
@@ -21,7 +21,7 @@ WHITE='\033[1;37m'
 NC='\033[0m'
 
 ADDIN_NAME="kuroagent"
-REPO_URL="https://github.com/yannassoumou/open-excel.git"
+REPO_URL="https://github.com/yannassoumou/open-kuroagent.git"
 INSTALL_DIR="$HOME/.kuroagent"
 ACTION="${1:-}"
 
@@ -107,17 +107,12 @@ do_install() {
 
     # Register CLI
     print_step "Registering 'kuroagent' CLI"
-    chmod +x "$INSTALL_DIR/bin/kuroagent" 2>/dev/null || true
-    LINKED=false
     if npm link 2>/dev/null; then
         print_success "npm link -- kuroagent CLI on PATH"
-        LINKED=true
-    fi
-    if [ "$LINKED" = false ]; then
+    else
         BIN_DIR="$HOME/.local/bin"
         mkdir -p "$BIN_DIR"
         ln -sf "$INSTALL_DIR/bin/kuroagent" "$BIN_DIR/kuroagent"
-        chmod +x "$INSTALL_DIR/bin/kuroagent"
         if [[ ":$PATH:" != *":$BIN_DIR:"* ]]; then
             SHELL_RC="$HOME/.bashrc"
             [ -f "$HOME/.zshrc" ] && SHELL_RC="$HOME/.zshrc"
@@ -178,17 +173,9 @@ do_update() {
 
     # Re-link
     print_step "Re-linking kuroagent CLI"
-    if npm link 2>/dev/null; then
-    chmod +x "$INSTALL_DIR/bin/kuroagent" 2>/dev/null || true
-        print_success "CLI re-linked"
-    else
-        print_warning "npm link failed, using symlink fallback"
-        BIN_DIR="$HOME/.local/bin"
-        mkdir -p "$BIN_DIR"
-        ln -sf "$INSTALL_DIR/bin/kuroagent" "$BIN_DIR/kuroagent"
-        chmod +x "$INSTALL_DIR/bin/kuroagent"
-        print_success "CLI symlinked to $BIN_DIR/kuroagent"
-    fi
+    npm uninstall -g kuroagent-custom-functions-js 2>/dev/null || true
+    npm link 2>/dev/null && print_success "CLI re-linked" || \
+        print_warning "npm link returned non-zero (may still work)"
 
     # Verify
     if command -v kuroagent &>/dev/null; then
@@ -252,7 +239,7 @@ do_uninstall() {
     echo -e "${GREEN}========================================${NC}"
     echo -e ""
     echo -e "  To reinstall:"
-    echo -e "    ${CYAN}curl -fsSL https://raw.githubusercontent.com/yannassoumou/open-excel/master/setup.sh | bash${NC}"
+    echo -e "    ${CYAN}curl -fsSL https://raw.githubusercontent.com/yannassoumou/open-kuroagent/master/setup.sh | bash${NC}"
     echo -e ""
 }
 

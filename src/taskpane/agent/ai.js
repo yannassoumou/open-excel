@@ -73,7 +73,7 @@ export function abortActiveRequest() {
   }
 }
 
-export async function streamFromAI(messages, onStop, maxTokens = 16384, onChunk = null) {
+export async function streamFromAI(messages, onStop, maxTokens = 32768, onChunk = null) {
   const headers = { "Content-Type": "application/json" };
   if (configuredApiKey) {
     headers["Authorization"] = `Bearer ${configuredApiKey}`;

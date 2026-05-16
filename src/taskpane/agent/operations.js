@@ -447,16 +447,22 @@ export const EXCEL_OPERATION_REGISTRY = {
   },
 
   // === Delete ===
-  deleteRows: {
-    required: ["sheet", "range"],
-    validate: (op) => typeof op.sheet === "string" && typeof op.range === "string",
-  },
-  deleteColumns: {
-    required: ["sheet", "range"],
-    validate: (op) => typeof op.sheet === "string" && typeof op.range === "string",
-  },
+     deleteRows: {
+       required: ["sheet", "range"],
+       validate: (op) => typeof op.sheet === "string" && typeof op.range === "string",
+     },
+     deleteColumns: {
+       required: ["sheet", "range"],
+       validate: (op) => typeof op.sheet === "string" && typeof op.range === "string",
+     },
 
-  // === Slicers ===
+     // === Clear Sheet ===
+     clearSheet: {
+       required: ["sheet"],
+       validate: (op) => typeof op.sheet === "string",
+     },
+
+     // === Slicers ===
   addSlicer: {
     required: ["pivotTable", "field", "slicerName", "sheet"],
     validate: (op) =>
@@ -1977,19 +1983,55 @@ const geoShape = Excel.GeometricShapeType;
     }
 
     case "deleteSlicer": {
-      const sheet = workbook.worksheets.getItem(op.sheet);
-      const slicer = sheet.slicers.getItemOrNullObject(op.name);
-      slicer.load("name, isNullObject");
-      await context.sync();
-      if (slicer.isNullObject) {
-        return `Skipped delete: slicer "${op.name}" not found on ${op.sheet}`;
-      }
-      slicer.delete();
-      await context.sync();
-      return `Deleted slicer "${op.name}" from ${op.sheet}`;
-    }
+       const sheet = workbook.worksheets.getItem(op.sheet);
+       const slicer = sheet.slicers.getItemOrNullObject(op.name);
+       slicer.load("name, isNullObject");
+       await context.sync();
+       if (slicer.isNullObject) {
+         return `Skipped delete: slicer "${op.name}" not found on ${op.sheet}`;
+       }
+       slicer.delete();
+       await context.sync();
+       return `Deleted slicer "${op.name}" from ${op.sheet}`;
+     }
 
-    default:
+     case "clearSheet": {
+       const sheet = workbook.worksheets.getItem(op.sheet);
+       // Clear all used ranges
+       const usedRange = sheet.getUsedRange();
+       if (!usedRange.isNullObject) {
+         usedRange.clear(Excel.ClearApplyTo.all);
+       }
+       // Delete all charts
+       const charts = sheet.charts;
+       charts.load("items/name");
+       await context.sync();
+       for (const chart of charts.items) {
+         chart.delete();
+       }
+       // Delete all shapes
+       const shapes = sheet.shapes;
+       shapes.load("items/name");
+       await context.sync();
+       for (const shape of shapes.items) {
+         shape.delete();
+       }
+       // Delete all tables
+       const tables = sheet.tables;
+       tables.load("items/name");
+       await context.sync();
+       for (const table of tables.items) {
+         table.delete();
+       }
+       // Clear conditional formatting
+       sheet.clearConditionalFormats();
+       // Clear filters
+       sheet.autoFilter.clear();
+       await context.sync();
+       return `Cleared all data, formatting, charts, shapes, tables, and filters from "${op.sheet}"`;
+     }
+
+     default:
       throw new Error(`Unknown operation type: "${type}"`);
   }
 }
