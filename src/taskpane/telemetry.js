@@ -1,4 +1,4 @@
-/* global localStorage, console, Office, fetch, crypto */
+/* global localStorage, console, Office, fetch, crypto, setTimeout */
 
 /**
  * Telemetry module — session management, step/snapshot tracking, feedback, and batching.
@@ -8,6 +8,7 @@
 // ─── Internal State ──────────────────────────────────────────────────────────
 
 let sessionId = null;
+let sessionIdPromise = null;
 let enabled = true;
 let queue = [];
 
@@ -266,7 +267,7 @@ export function getAllStats() {
 }
 
 /**
- * Initialize telemetry session. Must be called once at app start.
+ * Initialize telemetry session. Returns a Promise that resolves when session is created.
  */
 export function init(model, endpoint) {
   console.log("[telemetry] init() called with model:", model, "endpoint:", endpoint);
@@ -275,7 +276,7 @@ export function init(model, endpoint) {
   if (userEnabled === "false") {
     enabled = false;
     console.log("[telemetry] Disabled — user turned off telemetry");
-    return;
+    return Promise.resolve();
   }
   if (endpoint) {
     TELEMETRY_ENDPOINT = endpoint;
@@ -285,7 +286,7 @@ export function init(model, endpoint) {
   console.log("[telemetry] enabled:", enabled, "TELEMETRY_ENDPOINT:", TELEMETRY_ENDPOINT);
   if (!enabled) {
     console.log("[telemetry] Disabled — no endpoint configured");
-    return;
+    return Promise.resolve();
   }
 
   const platform =
@@ -296,7 +297,7 @@ export function init(model, endpoint) {
   const anonSessionId = getAnonSessionId();
   console.log("[telemetry] Creating session, anonSessionId:", anonSessionId, "platform:", platform);
 
-  fetch(`${TELEMETRY_ENDPOINT}/sessions`, {
+  sessionIdPromise = fetch(`${TELEMETRY_ENDPOINT}/sessions`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -326,10 +327,13 @@ export function init(model, endpoint) {
       console.error("[telemetry] Failed to create session:", err.message, err);
       enabled = false;
     });
+
+  return sessionIdPromise;
 }
 
 /**
  * Track a single step execution. Queued for batch flush.
+ * Waits for session creation if not yet ready.
  */
 export function trackStep(data) {
   console.log(
@@ -340,8 +344,25 @@ export function trackStep(data) {
     "step:",
     data.stepNumber
   );
-  if (!enabled || !sessionId) {
-    console.log("[telemetry] trackStep() skipped — enabled:", enabled, "sessionId:", sessionId);
+  if (!enabled) {
+    console.log("[telemetry] trackStep() skipped — disabled");
+    return;
+  }
+  if (!sessionId) {
+    console.log("[telemetry] trackStep() waiting for session, step:", data.stepNumber);
+    if (sessionIdPromise) {
+      sessionIdPromise
+        .then(() => {
+          if (sessionId) {
+            trackStep(data);
+          } else {
+            console.log("[telemetry] trackStep() skipped — session never created");
+          }
+        })
+        .catch(() => {
+          console.log("[telemetry] trackStep() skipped — session creation failed");
+        });
+    }
     return;
   }
 
@@ -386,9 +407,27 @@ export function trackStep(data) {
 
 /**
  * Track workbook snapshot (before/after).
+ * Waits for session creation if not yet ready.
  */
 export function trackSnapshot(phase, sheets) {
-  if (!enabled || !sessionId) return;
+  if (!enabled) return;
+  if (!sessionId) {
+    console.log("[telemetry] trackSnapshot() waiting for session, phase:", phase);
+    if (sessionIdPromise) {
+      sessionIdPromise
+        .then(() => {
+          if (sessionId) {
+            trackSnapshot(phase, sheets);
+          } else {
+            console.log("[telemetry] trackSnapshot() skipped — session never created");
+          }
+        })
+        .catch(() => {
+          console.log("[telemetry] trackSnapshot() skipped — session creation failed");
+        });
+    }
+    return;
+  }
 
   queue.push({
     url: `${TELEMETRY_ENDPOINT}/sessions/${sessionId}/snapshots`,
@@ -410,9 +449,27 @@ export function trackSnapshot(phase, sheets) {
 
 /**
  * Submit feedback after task completion.
+ * Waits for session creation if not yet ready.
  */
 export function submitFeedback(rating, comment, stats) {
-  if (!enabled || !sessionId) return;
+  if (!enabled) return;
+  if (!sessionId) {
+    console.log("[telemetry] submitFeedback() waiting for session");
+    if (sessionIdPromise) {
+      sessionIdPromise
+        .then(() => {
+          if (sessionId) {
+            submitFeedback(rating, comment, stats);
+          } else {
+            console.log("[telemetry] submitFeedback() skipped — session never created");
+          }
+        })
+        .catch(() => {
+          console.log("[telemetry] submitFeedback() skipped — session creation failed");
+        });
+    }
+    return;
+  }
 
   console.log("[telemetry] Submitting feedback:", rating, JSON.stringify(stats));
   fetch(`${TELEMETRY_ENDPOINT}/sessions/${sessionId}/feedback`, {
@@ -438,6 +495,8 @@ export function submitFeedback(rating, comment, stats) {
 
 /**
  * Flush all queued data and send session completion signal.
+ * Waits for session creation if not yet ready.
+ * Returns a Promise for awaiting completion.
  */
 export function flush(completed = true) {
   console.log(
@@ -448,34 +507,56 @@ export function flush(completed = true) {
     "completed:",
     completed
   );
-  if (!enabled || !sessionId) return;
+  if (!enabled) return Promise.resolve();
+  if (!sessionId) {
+    console.log("[telemetry] flush() waiting for session");
+    if (sessionIdPromise) {
+      return sessionIdPromise
+        .then(() => {
+          if (sessionId) {
+            return flush(completed);
+          } else {
+            console.log("[telemetry] flush() skipped — session never created");
+            return Promise.resolve();
+          }
+        })
+        .catch(() => {
+          console.log("[telemetry] flush() skipped — session creation failed");
+          return Promise.resolve();
+        });
+    }
+    return Promise.resolve();
+  }
 
-  console.log("[telemetry] Flushing session (completed:", completed, ")");
-  flushBatch(() => {
-    console.log(
-      "[telemetry] Sending flush to:",
-      `${TELEMETRY_ENDPOINT}/sessions/${sessionId}/flush`
-    );
-    const allStats = getAllStats();
-    fetch(`${TELEMETRY_ENDPOINT}/sessions/${sessionId}/flush`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        completed,
-        completedAt: new Date().toISOString(),
-        aiResponseStats: allStats.aiResponseStats,
-        phaseStats: allStats.phaseStats,
-        modelDiscoveryStats: allStats.modelDiscoveryStats,
-        consecutiveFailureStats: allStats.consecutiveFailureStats,
-      }),
-    })
-      .then((res) => {
-        console.log("[telemetry] Flush response status:", res.status);
-        console.log("[telemetry] Session flushed");
+  return new Promise((resolve) => {
+    console.log("[telemetry] Flushing session (completed:", completed, ")");
+    flushBatch(() => {
+      console.log(
+        "[telemetry] Sending flush to:",
+        `${TELEMETRY_ENDPOINT}/sessions/${sessionId}/flush`
+      );
+      const allStats = getAllStats();
+      fetch(`${TELEMETRY_ENDPOINT}/sessions/${sessionId}/flush`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          completed,
+          completedAt: new Date().toISOString(),
+          aiResponseStats: allStats.aiResponseStats,
+          phaseStats: allStats.phaseStats,
+          modelDiscoveryStats: allStats.modelDiscoveryStats,
+          consecutiveFailureStats: allStats.consecutiveFailureStats,
+        }),
       })
-      .catch((err) => {
-        console.error("[telemetry] Flush failed:", err.message, err);
-      });
+        .then((res) => {
+          console.log("[telemetry] Flush response status:", res.status);
+          console.log("[telemetry] Session flushed");
+        })
+        .catch((err) => {
+          console.error("[telemetry] Flush failed:", err.message, err);
+        })
+        .finally(() => resolve());
+    });
   });
 }
 
@@ -544,35 +625,68 @@ function flushBatch(onComplete) {
     JSON.parse(batch[0]?.body || "{}").stepNumber || JSON.parse(batch[0]?.body || "{}").phase
   );
   let completed = 0;
+  const total = batch.length;
 
   batch.forEach((item, idx) => {
     console.log(`[telemetry] Flush[${idx}]`, item.method, item.url);
     console.log(`[telemetry] Flush[${idx}] body length:`, item.body?.length);
-    fetch(item.url, {
-      method: item.method,
-      headers: { "Content-Type": "application/json" },
-      body: item.body,
-    })
-      .then((res) => {
-        console.log(`[telemetry] Flush[${idx}] response status:`, res.status);
-        if (res.status >= 400) {
-          return res.text().then((text) => {
-            console.error(`[telemetry] Flush[${idx}] failed with status ${res.status}:`, text);
-          });
-        }
+    sendWithRetry(item, idx, 2)
+      .then(() => {
         completed++;
-        if (completed === batch.length) {
+        if (completed === total) {
           console.log("[telemetry] Batch flush complete");
           onComplete && onComplete();
         }
       })
-      .catch((err) => {
-        console.error(`[telemetry] Flush[${idx}] network error:`, err.message, err);
+      .catch(() => {
+        console.error(`[telemetry] Flush[${idx}] all retries exhausted, re-queueing`);
+        queue.unshift(item);
         completed++;
-        if (completed === batch.length) {
-          console.log("[telemetry] Batch flush complete (with errors)");
+        if (completed === total) {
+          console.log("[telemetry] Batch flush complete (with re-queued failures)");
           onComplete && onComplete();
         }
       });
   });
+}
+
+function sendWithRetry(item, idx, retriesLeft) {
+  return fetch(item.url, {
+    method: item.method,
+    headers: { "Content-Type": "application/json" },
+    body: item.body,
+  })
+    .then((res) => {
+      console.log(`[telemetry] Flush[${idx}] response status:`, res.status);
+      if (res.status >= 400 && res.status < 500 && retriesLeft > 0) {
+        // Client errors (4xx) — don't retry
+        return res.text().then((text) => {
+          console.error(`[telemetry] Flush[${idx}] client error ${res.status}:`, text);
+          throw new Error(`HTTP ${res.status}`);
+        });
+      }
+      if (res.status >= 400) {
+        return res.text().then((text) => {
+          console.error(`[telemetry] Flush[${idx}] failed with status ${res.status}:`, text);
+          if (retriesLeft > 0) {
+            console.log(`[telemetry] Flush[${idx}] retrying (${retriesLeft} left)`);
+            return new Promise((r) => setTimeout(r, 1000 * (3 - retriesLeft))).then(() =>
+              sendWithRetry(item, idx, retriesLeft - 1)
+            );
+          }
+          throw new Error(`HTTP ${res.status}`);
+        });
+      }
+    })
+    .catch((err) => {
+      if (err.message.startsWith("HTTP ")) throw err;
+      console.error(`[telemetry] Flush[${idx}] network error:`, err.message, err);
+      if (retriesLeft > 0) {
+        console.log(`[telemetry] Flush[${idx}] retrying after network error (${retriesLeft} left)`);
+        return new Promise((r) => setTimeout(r, 1000 * (3 - retriesLeft))).then(() =>
+          sendWithRetry(item, idx, retriesLeft - 1)
+        );
+      }
+      throw err;
+    });
 }

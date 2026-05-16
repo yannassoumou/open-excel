@@ -1785,7 +1785,11 @@ export async function initAgentChat() {
     });
 
     const aiConf = getConfig();
-    initTelemetry(aiConf.model, DEFAULTS.telemetryEndpoint);
+    try {
+      await initTelemetry(aiConf.model, DEFAULTS.telemetryEndpoint);
+    } catch (err) {
+      console.error("[agentChat] Telemetry init failed:", err);
+    }
 
     console.log("[agentChat] initAgentChat complete, host:", currentHost);
   } catch (err) {
@@ -1824,6 +1828,7 @@ async function handleSend() {
   feedbackStepData = null;
   feedbackTotalSteps = 0;
   feedbackTotalTiming = 0;
+  const taskStartTime = Date.now();
 
   // Capture before snapshot for telemetry
   try {
@@ -1847,7 +1852,6 @@ async function handleSend() {
 
     // Phase 1: Planning
     console.log("[plan] === Starting planning phase ===");
-    const planStartTime = Date.now();
     let sheetContext = await getHostContextFn()();
     console.log("[plan] Context:", sheetContext);
     let systemPrompt = buildSystemPrompt(currentHost, currentMode, sheetContext);
@@ -1887,7 +1891,7 @@ async function handleSend() {
         }
       );
     } catch (error) {
-      const planTiming = Date.now() - planStartTime;
+      const planTiming = Date.now() - taskStartTime;
       stream.element.remove();
       appendMessage("agent", `Error: ${error.message || String(error)}`);
 
@@ -1941,7 +1945,7 @@ async function handleSend() {
       } else {
         appendMessage("agent", "No response from agent.");
       }
-      const nullTiming = Date.now() - planStartTime;
+      const nullTiming = Date.now() - taskStartTime;
       trackStep({
         stepNumber: 0,
         userPrompt: originalQuery,
@@ -2023,7 +2027,7 @@ async function handleSend() {
       stream.element.remove();
       appendMessage("agent", "No response from agent.");
       conversationHistory.push({ role: "assistant", content: planResponse });
-      const parseTiming = Date.now() - planStartTime;
+      const parseTiming = Date.now() - taskStartTime;
       trackStep({
         stepNumber: 0,
         userPrompt: originalQuery,
@@ -2081,7 +2085,7 @@ async function handleSend() {
         appendMessage("agent", planResponse || "No operations generated.");
       }
       conversationHistory.push({ role: "assistant", content: planResponse });
-      const chatTiming = Date.now() - planStartTime;
+      const chatTiming = Date.now() - taskStartTime;
       trackStep({
         stepNumber: 0,
         userPrompt: originalQuery,
@@ -2135,7 +2139,7 @@ async function handleSend() {
       stream.element.remove();
       appendMessage("agent", `⚠ Validation errors: ${validationErrors.join("; ")}`);
       conversationHistory.push({ role: "assistant", content: planResponse });
-      const validationTiming = Date.now() - planStartTime;
+      const validationTiming = Date.now() - taskStartTime;
       trackStep({
         stepNumber: 0,
         userPrompt: originalQuery,
@@ -2170,7 +2174,7 @@ async function handleSend() {
     // Phase 2: Execute operations loop
     await executeOperationsLoop(ops, sheetContext, systemPrompt);
   } catch (error) {
-    const handleTiming = Date.now() - planStartTime;
+    const handleTiming = Date.now() - taskStartTime;
     console.error("[agentChat] handleSend error:", error);
     stream?.element?.remove();
     appendMessage("agent", `Error: ${error.message || String(error)}`);
