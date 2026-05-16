@@ -88,10 +88,10 @@ function readConfig() {
 
 /**
  * KuroAgent — Ask any LLM directly from Excel.
- * 
+ *
  * Uses the same config as the KuroAgent task pane (endpoint, API key, model).
  * Configure once in the task pane, then use =KUROAGENT() anywhere.
- * 
+ *
  * @customfunction KUROAGENT
  * @param {string} prompt Your question or instruction for the AI
  * @param {string} [context] Optional additional context (e.g., "fr→en" for translation)
@@ -102,80 +102,81 @@ function readConfig() {
  */
 function kuroAgent(prompt, context) {
   const config = readConfig();
-  
+
   // Validate
   if (!prompt || typeof prompt !== "string" || prompt.trim() === "") {
     return "⚠️ Veuillez fournir une question ou instruction.";
   }
-  
+
   if (!config.apiKey || config.apiKey.includes("PLACEHOLDER") || config.apiKey === "") {
     return "⚠️ Clé API non configurée. Ouvrez le panneau KuroAgent → Settings → entrez votre clé API.";
   }
-  
+
   // Build prompt with optional context
-  const fullPrompt = context
-    ? `${prompt}\n\nContext: ${context}`
-    : prompt;
-  
+  const fullPrompt = context ? `${prompt}\n\nContext: ${context}` : prompt;
+
   // Build messages
   const messages = [
     {
       role: "system",
-      content: "You are a helpful assistant integrated into Excel. Provide clear, concise answers. When asked about Excel formulas or operations, provide specific, usable responses."
+      content:
+        "You are a helpful assistant integrated into Excel. Provide clear, concise answers. When asked about Excel formulas or operations, provide specific, usable responses.",
     },
     {
       role: "user",
-      content: fullPrompt
-    }
+      content: fullPrompt,
+    },
   ];
-  
+
   // Return a Promise — Excel custom functions support async
   return fetch(config.endpoint, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "Authorization": `Bearer ${config.apiKey}`
+      Authorization: `Bearer ${config.apiKey}`,
     },
     body: JSON.stringify({
       model: config.model,
       messages: messages,
       max_tokens: MAX_TOKENS,
-      temperature: TEMPERATURE
+      temperature: TEMPERATURE,
     }),
-    signal: AbortSignal.timeout(REQUEST_TIMEOUT)
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT),
   })
-  .then(response => {
-    if (!response.ok) {
-      return response.text().then(errText => {
-        throw new Error(`API error ${response.status}: ${errText.substring(0, 200)}`);
-      });
-    }
-    return response.json();
-  })
-  .then(data => {
-    const content = data.choices?.[0]?.message?.content;
-    if (content) {
-      // Truncate very long responses to fit in Excel cells
-      const maxLen = 8192;
-      return content.length > maxLen ? content.substring(0, maxLen) + "\n\n...(tronqué)" : content;
-    }
-    return "ℹ️ Aucune réponse de l'IA. Vérifiez votre clé API et le modèle.";
-  })
-  .catch(error => {
-    if (error.name === "TimeoutError") {
-      return "⏱️ Délai d'attente dépassé (5 min). Le modèle met trop de temps à répondre.";
-    }
-    if (error.message && error.message.includes("API error")) {
-      return `❌ Erreur API: ${error.message.substring(0, 300)}`;
-    }
-    return `❌ Erreur: ${error.message || String(error)}`;
-  });
+    .then((response) => {
+      if (!response.ok) {
+        return response.text().then((errText) => {
+          throw new Error(`API error ${response.status}: ${errText.substring(0, 200)}`);
+        });
+      }
+      return response.json();
+    })
+    .then((data) => {
+      const content = data.choices?.[0]?.message?.content;
+      if (content) {
+        // Truncate very long responses to fit in Excel cells
+        const maxLen = 8192;
+        return content.length > maxLen
+          ? content.substring(0, maxLen) + "\n\n...(tronqué)"
+          : content;
+      }
+      return "ℹ️ Aucune réponse de l'IA. Vérifiez votre clé API et le modèle.";
+    })
+    .catch((error) => {
+      if (error.name === "TimeoutError") {
+        return "⏱️ Délai d'attente dépassé (5 min). Le modèle met trop de temps à répondre.";
+      }
+      if (error.message && error.message.includes("API error")) {
+        return `❌ Erreur API: ${error.message.substring(0, 300)}`;
+      }
+      return `❌ Erreur: ${error.message || String(error)}`;
+    });
 }
 
 /**
  * KuroAgent Stream — same as KUROAGENT but returns a loading status initially.
  * For long-running queries, shows progress.
- * 
+ *
  * @customfunction KUROAGENT_STREAM
  * @param {string} prompt Your question or instruction
  * @param {string} [context] Optional context

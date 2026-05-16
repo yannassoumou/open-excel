@@ -135,7 +135,10 @@ export function renderMarkdown(text) {
   html = html.replace(/\*(.+?)\*/g, "<em>$1</em>");
 
   // Links
-  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+  html = html.replace(
+    /\[([^\]]+)\]\(([^)]+)\)/g,
+    '<a href="$2" target="_blank" rel="noopener">$1</a>'
+  );
 
   // Unordered lists (- item or * item)
   html = html.replace(/^[\-\*] (.+)$/gm, "<li>$1</li>");
@@ -182,12 +185,12 @@ export function setExecutingState(executing) {
 export function scrollChatToBottom() {
   const messagesContainer = document.getElementById("chat-messages");
   if (!messagesContainer) return;
-  
+
   if (isExecuting) {
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
     return;
   }
-  
+
   const isNearBottom =
     messagesContainer.scrollHeight - messagesContainer.scrollTop - messagesContainer.clientHeight <
     150;

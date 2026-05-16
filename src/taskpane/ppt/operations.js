@@ -19,12 +19,13 @@ export const PPT_OPERATION_REGISTRY = {
   addShape: {
     required: ["slide", "shapeType", "name"],
     validate: (op) =>
-      typeof op.slide === "string" && typeof op.shapeType === "string" && typeof op.name === "string",
+      typeof op.slide === "string" &&
+      typeof op.shapeType === "string" &&
+      typeof op.name === "string",
   },
   deleteShape: {
     required: ["slide", "name"],
-    validate: (op) =>
-      typeof op.slide === "string" && typeof op.name === "string",
+    validate: (op) => typeof op.slide === "string" && typeof op.name === "string",
   },
   addTable: {
     required: ["slide", "rows", "columns", "left", "top"],
@@ -162,7 +163,13 @@ export async function executePptOperation(context, op) {
         };
 
         const shapeTypeEnum = shapeTypeMap[op.shapeType] || PowerPoint.ShapeType.rectangle;
-        const shape = slide.shapes.addShape(shapeTypeEnum, op.left || 50, op.top || 50, op.width || 200, op.height || 100);
+        const shape = slide.shapes.addShape(
+          shapeTypeEnum,
+          op.left || 50,
+          op.top || 50,
+          op.width || 200,
+          op.height || 100
+        );
         shape.name = op.name;
         if (op.text) {
           shape.text = op.text;
@@ -278,7 +285,9 @@ export async function executePptOperation(context, op) {
         await context.sync();
 
         const shapeList = shapes.items.map((shape) => {
-          const textPreview = shape.text ? shape.text.substring(0, 80).replace(/\n/g, " ") : "(no text)";
+          const textPreview = shape.text
+            ? shape.text.substring(0, 80).replace(/\n/g, " ")
+            : "(no text)";
           return `  ${shape.name} (${shape.type}): "${textPreview}"`;
         });
 

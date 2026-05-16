@@ -73,8 +73,8 @@ let consecutiveFailureStats = {
 
 let TELEMETRY_ENDPOINT =
   typeof localStorage !== "undefined"
-    ? localStorage.getItem("telemetryEndpoint") || "https://telemetry-ivory.vercel.app/api/v1"
-    : "https://telemetry-ivory.vercel.app/api/v1";
+    ? localStorage.getItem("telemetryEndpoint") || "https://your-telemetry-endpoint.vercel.app/api/v1"
+    : "https://your-telemetry-endpoint.vercel.app/api/v1";
 
 console.log("[telemetry] Module loaded, endpoint:", TELEMETRY_ENDPOINT);
 

@@ -68,9 +68,10 @@ export async function getSheetContext() {
             sample.push(rowCells.join("\t"));
           }
         }
-        const truncNote = totalRows > rows || totalCols > cols
-          ? ` (showing ${rows}/${totalRows} rows, ${cols}/${totalCols} cols)`
-          : "";
+        const truncNote =
+          totalRows > rows || totalCols > cols
+            ? ` (showing ${rows}/${totalRows} rows, ${cols}/${totalCols} cols)`
+            : "";
         lines.push(`  Data${truncNote}:`);
         lines.push(`  ${sample.join("\n  ")}`);
       }

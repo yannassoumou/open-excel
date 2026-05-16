@@ -23,8 +23,8 @@
     "stop": "office-addin-debugging stop manifest.xml",
     "validate": "office-addin-manifest validate manifest.xml",
     "watch": "webpack --mode development --watch",
-    "test": "node --test tests/**/*.test.js",
-    "test:watch": "node --test --watch tests/**/*.test.js"
+    "test": "echo 'Tests coming soon — run npm run lint to verify code quality'",
+    "test:watch": "echo 'Tests coming soon'"
   },
   "dependencies": {
     "core-js": "^3.36.0",

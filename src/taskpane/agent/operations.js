@@ -447,22 +447,22 @@ export const EXCEL_OPERATION_REGISTRY = {
   },
 
   // === Delete ===
-     deleteRows: {
-       required: ["sheet", "range"],
-       validate: (op) => typeof op.sheet === "string" && typeof op.range === "string",
-     },
-     deleteColumns: {
-       required: ["sheet", "range"],
-       validate: (op) => typeof op.sheet === "string" && typeof op.range === "string",
-     },
+  deleteRows: {
+    required: ["sheet", "range"],
+    validate: (op) => typeof op.sheet === "string" && typeof op.range === "string",
+  },
+  deleteColumns: {
+    required: ["sheet", "range"],
+    validate: (op) => typeof op.sheet === "string" && typeof op.range === "string",
+  },
 
-     // === Clear Sheet ===
-     clearSheet: {
-       required: ["sheet"],
-       validate: (op) => typeof op.sheet === "string",
-     },
+  // === Clear Sheet ===
+  clearSheet: {
+    required: ["sheet"],
+    validate: (op) => typeof op.sheet === "string",
+  },
 
-     // === Slicers ===
+  // === Slicers ===
   addSlicer: {
     required: ["pivotTable", "field", "slicerName", "sheet"],
     validate: (op) =>
@@ -508,7 +508,7 @@ export function getChartTypeMap() {
         volume: Excel.ChartType.volume,
       };
     } catch (e) {
-      console.warn('[operations] ChartType enum not available:', e.message);
+      console.warn("[operations] ChartType enum not available:", e.message);
       _chartTypeMap = {};
     }
   }
@@ -594,7 +594,7 @@ function getIconSetsMap() {
         threeTrafficLights2: Excel.IconSetType.threeTrafficLights2,
       };
     } catch (e) {
-      console.warn('[operations] IconSetType enum not available:', e.message);
+      console.warn("[operations] IconSetType enum not available:", e.message);
       _iconSetsMap = {};
     }
   }
@@ -615,7 +615,7 @@ function getTextComparisonMap() {
         endsWith: Excel.TextComparisonOperator.endsWith,
       };
     } catch (e) {
-      console.warn('[operations] TextComparisonOperator enum not available:', e.message);
+      console.warn("[operations] TextComparisonOperator enum not available:", e.message);
       _textComparisonMap = {};
     }
   }
@@ -648,7 +648,7 @@ function getPresetCriteriaMap() {
         notContainsErrors: Excel.PresetCriteria.notContainsErrors,
       };
     } catch (e) {
-      console.warn('[operations] PresetCriteria enum not available:', e.message);
+      console.warn("[operations] PresetCriteria enum not available:", e.message);
       _presetCriteriaMap = {};
     }
   }
@@ -680,7 +680,7 @@ function getValidationRuleMap() {
         custom: Excel.DataValidationType.custom,
       };
     } catch (e) {
-      console.warn('[operations] DataValidationType enum not available:', e.message);
+      console.warn("[operations] DataValidationType enum not available:", e.message);
       _validationRuleMap = {};
     }
   }
@@ -703,7 +703,7 @@ function getValidationOperatorMap() {
         notEqual: Excel.DataValidationOperator.notEqual,
       };
     } catch (e) {
-      console.warn('[operations] DataValidationOperator enum not available:', e.message);
+      console.warn("[operations] DataValidationOperator enum not available:", e.message);
       _validationOperatorMap = {};
     }
   }
@@ -722,7 +722,7 @@ function getSortOrderMap() {
         descending: Excel.SortOrder.descending,
       };
     } catch (e) {
-      console.warn('[operations] SortOrder enum not available:', e.message);
+      console.warn("[operations] SortOrder enum not available:", e.message);
       _sortOrderMap = { ascending: 0, descending: 1 };
     }
   }
@@ -747,7 +747,7 @@ function getHAlignMap() {
         distributed: Excel.HorizontalAlignment.distributed,
       };
     } catch (e) {
-      console.warn('[operations] HorizontalAlignment enum not available:', e.message);
+      console.warn("[operations] HorizontalAlignment enum not available:", e.message);
       _hAlignMap = {};
     }
   }
@@ -769,7 +769,7 @@ function getVAlignMap() {
         distributed: Excel.VerticalAlignment.distributed,
       };
     } catch (e) {
-      console.warn('[operations] VerticalAlignment enum not available:', e.message);
+      console.warn("[operations] VerticalAlignment enum not available:", e.message);
       _vAlignMap = {};
     }
   }
@@ -794,7 +794,7 @@ function getBorderLocationMap() {
         diagonalDown: Excel.BorderLocation.diagonalDown,
       };
     } catch (e) {
-      console.warn('[operations] BorderLocation enum not available:', e.message);
+      console.warn("[operations] BorderLocation enum not available:", e.message);
       _borderLocationMap = {};
     }
   }
@@ -819,7 +819,7 @@ function getBorderStyleMap() {
         slantDashDot: Excel.BorderStyle.slantDashDot,
       };
     } catch (e) {
-      console.warn('[operations] BorderStyle enum not available:', e.message);
+      console.warn("[operations] BorderStyle enum not available:", e.message);
       _borderStyleMap = { continuous: 0 };
     }
   }
@@ -939,9 +939,13 @@ export async function executeOperation(context, op) {
       target.load("name");
       await context.sync();
       const insertPos = op.after
-         ? (Excel.WorksheetInsertPosition ? Excel.WorksheetInsertPosition.after : 1)
-         : (Excel.WorksheetInsertPosition ? Excel.WorksheetInsertPosition.before : 0);
-       source.copyInto(op.targetSheet, insertPos);
+        ? Excel.WorksheetInsertPosition
+          ? Excel.WorksheetInsertPosition.after
+          : 1
+        : Excel.WorksheetInsertPosition
+          ? Excel.WorksheetInsertPosition.before
+          : 0;
+      source.copyInto(op.targetSheet, insertPos);
       await context.sync();
       console.log(
         `[op:copyWorksheet] "${op.name}" → "${op.targetSheet}" (${op.after ? "after" : "before"})`
@@ -1117,12 +1121,16 @@ export async function executeOperation(context, op) {
     }
 
     case "setFontUnderline": {
-const sheet = workbook.worksheets.getItem(op.sheet);
+      const sheet = workbook.worksheets.getItem(op.sheet);
       const range = sheet.getRange(op.range);
       const underlineStyle = Excel.FontUnderlineStyle;
       range.format.font.underline = op.underline
-        ? (underlineStyle ? underlineStyle.singleLine : 1)
-        : (underlineStyle ? underlineStyle.none : 0);
+        ? underlineStyle
+          ? underlineStyle.singleLine
+          : 1
+        : underlineStyle
+          ? underlineStyle.none
+          : 0;
       await context.sync();
       return `Set font underline=${op.underline} on ${op.sheet}!${op.range}`;
     }
@@ -1218,7 +1226,8 @@ const sheet = workbook.worksheets.getItem(op.sheet);
       const styleMap = getBorderStyleMap();
       // Map border location string to index: edgeTop=0, edgeBottom=1, edgeLeft=2, edgeRight=3, insideHorizontal=4, insideVertical=5
       const locationIndex = locMap[op.location] !== undefined ? locMap[op.location] : 0;
-      const location = locMap[op.location] || (Excel.BorderLocation ? Excel.BorderLocation.edgeTop : 0);
+      const location =
+        locMap[op.location] || (Excel.BorderLocation ? Excel.BorderLocation.edgeTop : 0);
       const style = styleMap[op.style] || (Excel.BorderStyle ? Excel.BorderStyle.continuous : 0);
       const border = range.format.borders.getItem(locationIndex);
       border.style = style;
@@ -1333,7 +1342,11 @@ const sheet = workbook.worksheets.getItem(op.sheet);
         const sortOrder = getSortOrderMap();
         return {
           key: c.key,
-          ascending: c.order ? (sortOrder[c.order] || 0) : (Excel.SortOrder ? Excel.SortOrder.ascending : 0),
+          ascending: c.order
+            ? sortOrder[c.order] || 0
+            : Excel.SortOrder
+              ? Excel.SortOrder.ascending
+              : 0,
         };
       });
       table.sort.apply(keys);
@@ -1420,9 +1433,14 @@ const sheet = workbook.worksheets.getItem(op.sheet);
     case "addChart": {
       const sheet8 = workbook.worksheets.getItem(op.sheet);
       const chartTypeMap = getChartTypeMap();
-      const chartType = chartTypeMap[op.chartType] || (Excel.ChartType ? Excel.ChartType.columnClustered : 0);
+      const chartType =
+        chartTypeMap[op.chartType] || (Excel.ChartType ? Excel.ChartType.columnClustered : 0);
       const chartSeriesBy = Excel.ChartSeriesBy;
-      const chart = sheet8.charts.add(chartType, sheet8.getRange(op.dataRange), chartSeriesBy ? chartSeriesBy.columns : 0);
+      const chart = sheet8.charts.add(
+        chartType,
+        sheet8.getRange(op.dataRange),
+        chartSeriesBy ? chartSeriesBy.columns : 0
+      );
       chart.name = op.title;
       chart.title.text = op.title;
       chart.title.format.font.size = 12;
@@ -1540,7 +1558,7 @@ const sheet = workbook.worksheets.getItem(op.sheet);
         throw new Error(`Field "${op.field}" not found in pivot table "${op.pivotTable}"`);
       }
       const insertPosEnum = getPivotHierarchyInsertPosition();
-      const insertPos = op.index !== undefined ? op.index : (insertPosEnum ? insertPosEnum.end : 1);
+      const insertPos = op.index !== undefined ? op.index : insertPosEnum ? insertPosEnum.end : 1;
       hierarchy.add(insertPos, hierarchy.items[fieldIndex]);
       await context.sync();
       return `Added field "${op.field}" to "${op.category}" of pivot table "${op.pivotTable}"`;
@@ -1660,7 +1678,8 @@ const sheet = workbook.worksheets.getItem(op.sheet);
       const cf = range.conditionalFormats.add(Excel.ConditionalFormatType.iconSet);
       const iconSet = cf.iconSet;
       const iconSets = getIconSetsMap();
-      iconSet.iconSet = iconSets[op.iconSet] || (Excel.IconSetType ? Excel.IconSetType.threeArrows : 0);
+      iconSet.iconSet =
+        iconSets[op.iconSet] || (Excel.IconSetType ? Excel.IconSetType.threeArrows : 0);
       await context.sync();
       return `Added icon set "${op.iconSet}" to ${op.sheet}!${op.range}`;
     }
@@ -1669,11 +1688,15 @@ const sheet = workbook.worksheets.getItem(op.sheet);
       const sheet = workbook.worksheets.getItem(op.sheet);
       const range = sheet.getRange(op.range);
       const cf = range.conditionalFormats.add(Excel.ConditionalFormatType.textComparison);
-const textCf = cf.textComparison;
+      const textCf = cf.textComparison;
       const textMap = getTextComparisonMap();
-      const operator = textMap[op.operator] || (Excel.TextComparisonOperator ? Excel.TextComparisonOperator.containsText : 0);
+      const operator =
+        textMap[op.operator] ||
+        (Excel.TextComparisonOperator ? Excel.TextComparisonOperator.containsText : 0);
       textCf.criterion = op.text || "";
-      textCf.textComparison = textMap[op.textComparison] || (Excel.TextComparisonOperator ? Excel.TextComparisonOperator.containsText : 0);
+      textCf.textComparison =
+        textMap[op.textComparison] ||
+        (Excel.TextComparisonOperator ? Excel.TextComparisonOperator.containsText : 0);
       textCf.operator = operator;
       await context.sync();
       return `Added text comparison to ${op.sheet}!${op.range}`;
@@ -1697,7 +1720,9 @@ const textCf = cf.textComparison;
       const cf = range.conditionalFormats.add(Excel.ConditionalFormatType.presetCriteria);
       const preset = cf.presetCriteria;
       const presetCriteria = getPresetCriteriaMap();
-      preset.criteria = presetCriteria[op.criteria] || (Excel.PresetCriteria ? Excel.PresetCriteria.aboveAverage : 0);
+      preset.criteria =
+        presetCriteria[op.criteria] ||
+        (Excel.PresetCriteria ? Excel.PresetCriteria.aboveAverage : 0);
       await context.sync();
       return `Added preset criteria "${op.criteria}" to ${op.sheet}!${op.range}`;
     }
@@ -1722,14 +1747,31 @@ const textCf = cf.textComparison;
     // === Shapes ===
     case "addShape": {
       const sheet = workbook.worksheets.getItem(op.sheet);
-const geoShape = Excel.GeometricShapeType;
+      const geoShape = Excel.GeometricShapeType;
       const shapeType =
-        op.shapeType === "rectangle" ? (geoShape ? geoShape.rectangle : 0)
-        : op.shapeType === "ellipse" ? (geoShape ? geoShape.ellipse : 0)
-        : op.shapeType === "triangle" ? (geoShape ? geoShape.rightTriangle : 0)
-        : op.shapeType === "star" ? (geoShape ? geoShape.star5 : 0)
-        : op.shapeType === "circle" ? (geoShape ? geoShape.ellipse : 0)
-        : (geoShape ? geoShape.rectangle : 0);
+        op.shapeType === "rectangle"
+          ? geoShape
+            ? geoShape.rectangle
+            : 0
+          : op.shapeType === "ellipse"
+            ? geoShape
+              ? geoShape.ellipse
+              : 0
+            : op.shapeType === "triangle"
+              ? geoShape
+                ? geoShape.rightTriangle
+                : 0
+              : op.shapeType === "star"
+                ? geoShape
+                  ? geoShape.star5
+                  : 0
+                : op.shapeType === "circle"
+                  ? geoShape
+                    ? geoShape.ellipse
+                    : 0
+                  : geoShape
+                    ? geoShape.rectangle
+                    : 0;
       const shape = sheet.shapes.addGeometricShape(shapeType, op.left, op.top, op.width, op.height);
       shape.name = op.name;
       await context.sync();
@@ -1771,9 +1813,13 @@ const geoShape = Excel.GeometricShapeType;
       const range = sheet.getRange(op.range);
       const ruleMap = getValidationRuleMap();
       const opMap = getValidationOperatorMap();
-      const rule = ruleMap[op.ruleType] || (Excel.DataValidationType ? Excel.DataValidationType.wholeNumber : 0);
+      const rule =
+        ruleMap[op.ruleType] ||
+        (Excel.DataValidationType ? Excel.DataValidationType.wholeNumber : 0);
       const validation = range.dataValidation;
-      const opEnum = opMap[op.operator] || (Excel.DataValidationOperator ? Excel.DataValidationOperator.greaterThan : 0);
+      const opEnum =
+        opMap[op.operator] ||
+        (Excel.DataValidationOperator ? Excel.DataValidationOperator.greaterThan : 0);
 
       // Use dataValidation.set() instead of apply()
       if (op.ruleType === "list") {
@@ -1863,9 +1909,10 @@ const geoShape = Excel.GeometricShapeType;
         freezePanes.freezeColumns(op.column || 1);
       } else if (op.freezeType === "freezePanes") {
         // freezeAt takes a range or string address
-        const frozenRange = op.row && op.column
-          ? `${indexToCol(op.column)}${op.row}:${indexToCol(op.column)}${op.row}`
-          : `A1`;
+        const frozenRange =
+          op.row && op.column
+            ? `${indexToCol(op.column)}${op.row}:${indexToCol(op.column)}${op.row}`
+            : `A1`;
         freezePanes.freezeAt(frozenRange);
       } else if (op.freezeType === "unfreeze") {
         freezePanes.unfreeze();
@@ -1928,7 +1975,7 @@ const geoShape = Excel.GeometricShapeType;
       return `Unprotected sheet "${op.name}"`;
     }
 
-// === Sort ===
+    // === Sort ===
     case "sortRange": {
       const sheet = workbook.worksheets.getItem(op.sheet);
       const range = sheet.getRange(op.range);
@@ -1936,7 +1983,11 @@ const geoShape = Excel.GeometricShapeType;
       const keys = [
         {
           key: op.key,
-          ascending: op.order ? (sortOrder[op.order] || 0) : (Excel.SortOrder ? Excel.SortOrder.ascending : 0),
+          ascending: op.order
+            ? sortOrder[op.order] || 0
+            : Excel.SortOrder
+              ? Excel.SortOrder.ascending
+              : 0,
         },
       ];
       range.sort.apply(keys);
@@ -1983,55 +2034,55 @@ const geoShape = Excel.GeometricShapeType;
     }
 
     case "deleteSlicer": {
-       const sheet = workbook.worksheets.getItem(op.sheet);
-       const slicer = sheet.slicers.getItemOrNullObject(op.name);
-       slicer.load("name, isNullObject");
-       await context.sync();
-       if (slicer.isNullObject) {
-         return `Skipped delete: slicer "${op.name}" not found on ${op.sheet}`;
-       }
-       slicer.delete();
-       await context.sync();
-       return `Deleted slicer "${op.name}" from ${op.sheet}`;
-     }
+      const sheet = workbook.worksheets.getItem(op.sheet);
+      const slicer = sheet.slicers.getItemOrNullObject(op.name);
+      slicer.load("name, isNullObject");
+      await context.sync();
+      if (slicer.isNullObject) {
+        return `Skipped delete: slicer "${op.name}" not found on ${op.sheet}`;
+      }
+      slicer.delete();
+      await context.sync();
+      return `Deleted slicer "${op.name}" from ${op.sheet}`;
+    }
 
-     case "clearSheet": {
-       const sheet = workbook.worksheets.getItem(op.sheet);
-       // Clear all used ranges
-       const usedRange = sheet.getUsedRange();
-       if (!usedRange.isNullObject) {
-         usedRange.clear(Excel.ClearApplyTo.all);
-       }
-       // Delete all charts
-       const charts = sheet.charts;
-       charts.load("items/name");
-       await context.sync();
-       for (const chart of charts.items) {
-         chart.delete();
-       }
-       // Delete all shapes
-       const shapes = sheet.shapes;
-       shapes.load("items/name");
-       await context.sync();
-       for (const shape of shapes.items) {
-         shape.delete();
-       }
-       // Delete all tables
-       const tables = sheet.tables;
-       tables.load("items/name");
-       await context.sync();
-       for (const table of tables.items) {
-         table.delete();
-       }
-       // Clear conditional formatting
-       sheet.clearConditionalFormats();
-       // Clear filters
-       sheet.autoFilter.clear();
-       await context.sync();
-       return `Cleared all data, formatting, charts, shapes, tables, and filters from "${op.sheet}"`;
-     }
+    case "clearSheet": {
+      const sheet = workbook.worksheets.getItem(op.sheet);
+      // Clear all used ranges
+      const usedRange = sheet.getUsedRange();
+      if (!usedRange.isNullObject) {
+        usedRange.clear(Excel.ClearApplyTo.all);
+      }
+      // Delete all charts
+      const charts = sheet.charts;
+      charts.load("items/name");
+      await context.sync();
+      for (const chart of charts.items) {
+        chart.delete();
+      }
+      // Delete all shapes
+      const shapes = sheet.shapes;
+      shapes.load("items/name");
+      await context.sync();
+      for (const shape of shapes.items) {
+        shape.delete();
+      }
+      // Delete all tables
+      const tables = sheet.tables;
+      tables.load("items/name");
+      await context.sync();
+      for (const table of tables.items) {
+        table.delete();
+      }
+      // Clear conditional formatting
+      sheet.clearConditionalFormats();
+      // Clear filters
+      sheet.autoFilter.clear();
+      await context.sync();
+      return `Cleared all data, formatting, charts, shapes, tables, and filters from "${op.sheet}"`;
+    }
 
-     default:
+    default:
       throw new Error(`Unknown operation type: "${type}"`);
   }
 }
@@ -2071,7 +2122,7 @@ async function executeWithRetry(executeFn, opName, maxRetries = 1) {
         const backoffMs = 1000 * (attempt + 1); // 1s, 2s, ...
         console.warn(
           `[op:${opName}] Transient error (attempt ${attempt + 1}/${maxRetries + 1}): ${error.message}. ` +
-          `Retrying in ${backoffMs}ms...`
+            `Retrying in ${backoffMs}ms...`
         );
         await new Promise((resolve) => setTimeout(resolve, backoffMs));
         continue;

@@ -95,15 +95,15 @@ To add a new Excel operation:
 ## Testing
 
 ```bash
-npm test          # Run all tests
-npm run test:watch # Watch mode
+npm run lint              # ESLint check
+npm run lint:fix          # Auto-fix lint issues
+npm run build             # Verify production build
 ```
 
-Tests cover:
+Test coverage is planned for:
 - JSON parser (extraction, repair, edge cases)
 - Operation validator (all 60+ operations)
 - Mock Excel execution
-- Edge cases (empty input, malformed JSON, etc.)
 
 ## Commit Guidelines
 
@@ -121,7 +121,7 @@ Tests cover:
 
 ## Reporting Issues
 
-Use [GitHub Issues](https://github.com/yannassoumou/excel/issues) with:
+Use [GitHub Issues](https://github.com/yannassoumou/open-excel/issues) with:
 
 - **Bug Report**: steps to reproduce, expected vs actual behavior, Excel version
 - **Feature Request**: description, use case, why it matters

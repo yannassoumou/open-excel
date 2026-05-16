@@ -7,7 +7,7 @@ import { trackAIRequest, trackModelDiscovery } from "../telemetry.js";
 
 const DEFAULT_ENDPOINT = "https://openrouter.ai/api/v1/chat/completions";
 const DEFAULT_MODEL = "gpt-4";
-const TELEMETRY_ENDPOINT_DEFAULT = "https://telemetry-ivory.vercel.app/api/v1";
+const TELEMETRY_ENDPOINT_DEFAULT = "https://your-telemetry-endpoint.vercel.app/api/v1";
 const APP_VERSION = "1.0.2";
 
 let configuredEndpoint = sessionStorage.getItem("agentEndpoint") || DEFAULT_ENDPOINT;

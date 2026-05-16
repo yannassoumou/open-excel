@@ -107,7 +107,9 @@ export async function readFullPresentationContext() {
     for (const slide of info.slides) {
       lines.push(`  Slide "${slide.name}": ${slide.shapeCount} shape(s)`);
       for (const shape of slide.shapes) {
-        const textPreview = shape.text ? shape.text.substring(0, 100).replace(/\n/g, "\\n") : "(no text)";
+        const textPreview = shape.text
+          ? shape.text.substring(0, 100).replace(/\n/g, "\\n")
+          : "(no text)";
         lines.push(`    - "${shape.name}" (${shape.type}): ${textPreview}`);
       }
     }
