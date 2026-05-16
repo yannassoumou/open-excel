@@ -1,5 +1,8 @@
 /* global console, sessionStorage, AbortController, fetch, TextDecoder, clearTimeout, setTimeout, setInterval, clearInterval */
 
+// Telemetry functions — imported dynamically to avoid circular dependencies
+import { trackAIRequest, trackModelDiscovery } from "../telemetry.js";
+
 /* AI communication — streaming chat completions */
 
 const DEFAULT_ENDPOINT = "https://openrouter.ai/api/v1/chat/completions";
@@ -57,6 +60,14 @@ export function setConfig(updates) {
 }
 
 /**
+ * Estimate token count from text (rough approximation).
+ */
+function estimateTokens(text) {
+  if (!text) return 0;
+  return Math.ceil(text.length / 4);
+}
+
+/**
  * Stream response from AI endpoint using SSE.
  * @param {Array} messages - Chat messages
  * @param {function} onStop - Sync check — return truthy to abort
@@ -82,6 +93,7 @@ export async function streamFromAI(messages, onStop, maxTokens = 32768, onChunk 
   const controller = new AbortController();
   _activeController = controller;
   const timeout = setTimeout(() => controller.abort(), 300000); // 5 min timeout
+  const requestStart = Date.now();
 
   try {
     // Notify UI that request is starting
@@ -99,13 +111,43 @@ export async function streamFromAI(messages, onStop, maxTokens = 32768, onChunk 
       signal: controller.signal,
     });
 
+    const latencyMs = Date.now() - requestStart;
+
     if (!response.ok) {
       const errorText = await response.text();
+      // Track failed AI request
+      try {
+        if (typeof trackAIRequest !== "undefined") {
+          trackAIRequest(latencyMs, 0, response.status);
+        }
+      } catch (e) {
+        // Telemetry tracking failed - non-critical
+      }
       throw new Error(`API error ${response.status}: ${errorText}`);
     }
 
     const data = await response.json();
     const result = data.choices?.[0]?.message?.content?.trim() || null;
+
+    // Extract token counts from response
+    let tokenCount = 0;
+    if (data.usage) {
+      tokenCount = data.usage.completion_tokens || data.usage.tokens || 0;
+      // Also track prompt tokens for context size analysis
+      const promptTokens = data.usage.prompt_tokens || 0;
+      console.log(
+        `[agent:ai] Token usage — prompt: ${promptTokens}, completion: ${tokenCount}, total: ${data.usage.total_tokens || promptTokens + tokenCount}`
+      );
+    }
+
+    // Track successful AI request
+    try {
+      if (typeof trackAIRequest !== "undefined") {
+        trackAIRequest(latencyMs, tokenCount, response.status);
+      }
+    } catch (e) {
+      // Telemetry tracking failed - non-critical
+    }
 
     // Check if user aborted while we were waiting
     if (onStop && onStop()) {
@@ -115,6 +157,17 @@ export async function streamFromAI(messages, onStop, maxTokens = 32768, onChunk 
 
     if (onChunk && result) onChunk(result, true);
     return result;
+  } catch (error) {
+    const latencyMs = Date.now() - requestStart;
+    // Track failed AI request (network error, timeout, etc.)
+    try {
+      if (typeof trackAIRequest !== "undefined") {
+        trackAIRequest(latencyMs, 0, 0);
+      }
+    } catch (e) {
+      // Telemetry tracking failed - non-critical
+    }
+    throw error;
   } finally {
     clearTimeout(timeout);
     _activeController = null;
@@ -130,51 +183,79 @@ export async function streamFromAI(messages, onStop, maxTokens = 32768, onChunk 
  * @returns {Promise<string[]>} Array of model ID strings
  */
 export async function fetchModels(endpoint, apiKey) {
-  let baseUrl = endpoint;
+  const startTime = Date.now();
 
-  // Strip common suffixes to get base URL
-  const suffixes = ["/v1/chat/completions", "/chat/completions", "/v1", ""];
-  for (const suffix of suffixes) {
-    if (baseUrl.endsWith(suffix) && suffix.length > 0) {
-      baseUrl = baseUrl.slice(0, -suffix.length);
-      break;
+  try {
+    let baseUrl = endpoint;
+
+    // Strip common suffixes to get base URL
+    const suffixes = ["/v1/chat/completions", "/chat/completions", "/v1", ""];
+    for (const suffix of suffixes) {
+      if (baseUrl.endsWith(suffix) && suffix.length > 0) {
+        baseUrl = baseUrl.slice(0, -suffix.length);
+        break;
+      }
     }
+
+    // Remove trailing slash
+    baseUrl = baseUrl.replace(/\/+$/, "");
+
+    const modelsUrl = `${baseUrl}/v1/models`;
+
+    const headers = { "Content-Type": "application/json" };
+    if (apiKey) {
+      headers["Authorization"] = `Bearer ${apiKey}`;
+    }
+
+    const response = await fetch(modelsUrl, { headers });
+
+    if (!response.ok) {
+      throw new Error(`Models endpoint returned ${response.status}`);
+    }
+
+    const data = await response.json();
+    let models;
+
+    // OpenAI-compatible format: { data: [{ id: "..." }] }
+    if (data.data && Array.isArray(data.data)) {
+      models = data.data.map((m) => m.id).filter(Boolean);
+    }
+    // Ollama format: { models: [{ name: "..." }] }
+    else if (data.models && Array.isArray(data.models)) {
+      models = data.models.map((m) => m.name || m.id).filter(Boolean);
+    }
+    // NousResearch / OpenRouter format: { data: [{ id: "..." }] }
+    else if (data.data && typeof data.data === "object") {
+      models = Object.values(data.data)
+        .map((m) => (typeof m === "string" ? m : m.id))
+        .filter(Boolean);
+    } else {
+      models = [];
+    }
+
+    // Track successful model discovery
+    const latencyMs = Date.now() - startTime;
+    try {
+      if (typeof trackModelDiscovery !== "undefined") {
+        trackModelDiscovery(true, models, null);
+      }
+    } catch (e) {
+      // Telemetry tracking failed - non-critical
+    }
+
+    console.log(`[agent:ai] Model discovery: found ${models.length} models in ${latencyMs}ms`);
+    return models;
+  } catch (error) {
+    const latencyMs = Date.now() - startTime;
+    // Track failed model discovery
+    try {
+      if (typeof trackModelDiscovery !== "undefined") {
+        trackModelDiscovery(false, [], error);
+      }
+    } catch (e) {
+      // Telemetry tracking failed - non-critical
+    }
+    console.log(`[agent:ai] Model discovery failed in ${latencyMs}ms:`, error.message);
+    throw error;
   }
-
-  // Remove trailing slash
-  baseUrl = baseUrl.replace(/\/+$/, "");
-
-  const modelsUrl = `${baseUrl}/v1/models`;
-
-  const headers = { "Content-Type": "application/json" };
-  if (apiKey) {
-    headers["Authorization"] = `Bearer ${apiKey}`;
-  }
-
-  const response = await fetch(modelsUrl, { headers });
-
-  if (!response.ok) {
-    throw new Error(`Models endpoint returned ${response.status}`);
-  }
-
-  const data = await response.json();
-
-  // OpenAI-compatible format: { data: [{ id: "..." }] }
-  if (data.data && Array.isArray(data.data)) {
-    return data.data.map((m) => m.id).filter(Boolean);
-  }
-
-  // Ollama format: { models: [{ name: "..." }] }
-  if (data.models && Array.isArray(data.models)) {
-    return data.models.map((m) => m.name || m.id).filter(Boolean);
-  }
-
-  // NousResearch / OpenRouter format: { data: [{ id: "..." }] }
-  if (data.data && typeof data.data === "object") {
-    return Object.values(data.data)
-      .map((m) => (typeof m === "string" ? m : m.id))
-      .filter(Boolean);
-  }
-
-  return [];
 }

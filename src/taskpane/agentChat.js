@@ -21,7 +21,11 @@ import {
   isCompletionClaim,
   isActionableResponse,
 } from "./agent/parser.js";
-import { EXCEL_OPERATION_REGISTRY, dispatchExecuteOperation, executeOperationWithTracking } from "./agent/operations.js";
+import {
+  EXCEL_OPERATION_REGISTRY,
+  dispatchExecuteOperation,
+  executeOperationWithTracking,
+} from "./agent/operations.js";
 import {
   appendMessage,
   appendPlanMessage,
@@ -48,6 +52,9 @@ import {
   trackSnapshot,
   submitFeedback,
   flush as flushTelemetry,
+  trackPhase,
+  trackConsecutiveFailure,
+  recordOpResult,
 } from "./telemetry.js";
 
 // ─── Image Preview ───────────────────────────────────────────────────────────
@@ -273,13 +280,13 @@ function resetForNextTask() {
 function acknowledgeCompletion() {
   const messagesContainer = document.getElementById("chat-messages");
   if (!messagesContainer) return;
-  
+
   const feedbackGroup = messagesContainer.querySelector(".agent-feedback-group");
   if (feedbackGroup) feedbackGroup.style.display = "none";
-  
+
   const improveArea = messagesContainer.querySelector(".agent-improve-area");
   if (improveArea) improveArea.style.display = "none";
-  
+
   isExecuting = false;
   isStopped = false;
 }
@@ -353,6 +360,14 @@ async function handleImprove(comment, taskStats) {
 
   appendMessage("agent", `🔧 Applying improvements: "${comment}"`);
 
+  // Track improvement phase start
+  const improveStartTime = Date.now();
+  try {
+    trackPhase("improvement", true, 0);
+  } catch (e) {
+    // Non-critical
+  }
+
   await loadHostModules();
   const sheetContext = await getHostContextFn()();
   const systemPrompt = buildSystemPrompt(currentHost, currentMode, sheetContext);
@@ -404,20 +419,20 @@ Please generate new structured operations to incorporate this improvement. Outpu
       }
       conversationHistory.push({ role: "assistant", content: retryResponse });
       const retryOps = extractOperations(retryResponse);
-       if (!retryOps || retryOps.operations.length === 0) {
-         appendMessage("agent", `ℹ ${improveResponse.substring(0, 300)}`);
-         submitFeedback("improve", comment, { ...taskStats, improvementApplied: false });
-         acknowledgeCompletion();
-         return;
-       }
-       improveOps = retryOps;
-     } else {
-       appendMessage("agent", `ℹ ${improveResponse.substring(0, 300)}`);
-       submitFeedback("improve", comment, { ...taskStats, improvementApplied: false });
-       acknowledgeCompletion();
-       return;
-     }
-   }
+      if (!retryOps || retryOps.operations.length === 0) {
+        appendMessage("agent", `ℹ ${improveResponse.substring(0, 300)}`);
+        submitFeedback("improve", comment, { ...taskStats, improvementApplied: false });
+        acknowledgeCompletion();
+        return;
+      }
+      improveOps = retryOps;
+    } else {
+      appendMessage("agent", `ℹ ${improveResponse.substring(0, 300)}`);
+      submitFeedback("improve", comment, { ...taskStats, improvementApplied: false });
+      acknowledgeCompletion();
+      return;
+    }
+  }
 
   console.log("[improve] Executing", improveOps.operations.length, "improvement operations");
   appendMessage(
@@ -452,12 +467,27 @@ Please generate new structured operations to incorporate this improvement. Outpu
 
   const improveTiming = Date.now() - improveStepStart;
 
- if (improveHadError) {
-     appendMessage("agent", `❌ Some improvements failed: ${improveResults.join("\n")}`);
-     submitFeedback("improve", comment, { ...taskStats, improvementApplied: false });
-     acknowledgeCompletion();
-     return;
-   }
+  if (improveHadError) {
+    appendMessage("agent", `❌ Some improvements failed: ${improveResults.join("\n")}`);
+
+    // Track improvement phase failure
+    try {
+      trackPhase("improvement", false, improveTiming);
+    } catch (e) {
+      // Non-critical
+    }
+
+    submitFeedback("improve", comment, { ...taskStats, improvementApplied: false });
+    acknowledgeCompletion();
+    return;
+  }
+
+  // Track improvement phase success
+  try {
+    trackPhase("improvement", true, improveTiming);
+  } catch (e) {
+    // Non-critical
+  }
 
   const actualNames = getHostExtractNamesFn()(improveResults, improveOps.operations);
   const improvementVerification = await getHostVerifyFn()(improveOps.operations, actualNames);
@@ -480,6 +510,9 @@ Please generate new structured operations to incorporate this improvement. Outpu
     conversationHistory: [...conversationHistory],
     sheetContext,
     systemPrompt,
+    aiModel: configuredModel,
+    aiEndpoint: configuredEndpoint,
+    phase: "improvement",
   });
   feedbackTotalSteps++;
   feedbackTotalTiming += improveTiming;
@@ -497,17 +530,17 @@ Please generate new structured operations to incorporate this improvement. Outpu
   const lastBubble = messagesContainer.querySelector(
     ".agent-message.agent:last-child .agent-bubble"
   );
-    if (lastBubble) {
-       appendFeedbackButtons(lastBubble, {
-         onOk: () => {
-           submitFeedback("ok", comment, { ...taskStats, improvementApplied: true });
-           acknowledgeCompletion();
-         },
-         onBad: () => {
-           submitFeedback("bad", comment, { ...taskStats, improvementApplied: true });
-           acknowledgeCompletion();
-         },
-         onImprove: (newComment) => {
+  if (lastBubble) {
+    appendFeedbackButtons(lastBubble, {
+      onOk: () => {
+        submitFeedback("ok", comment, { ...taskStats, improvementApplied: true });
+        acknowledgeCompletion();
+      },
+      onBad: () => {
+        submitFeedback("bad", comment, { ...taskStats, improvementApplied: true });
+        acknowledgeCompletion();
+      },
+      onImprove: (newComment) => {
         handleImprove(newComment, { ...taskStats, improvementApplied: true });
       },
     });
@@ -577,22 +610,22 @@ CRITICAL: Do NOT pass validation unless each requirement is verified.`,
       ];
 
       const validationResult = await streamFromAI(validationMessages, () => isStopped);
-if (validationResult) {
-     const jsonMatch = validationResult.match(/```(?:json)?\s*[\r\n]+([\s\S]*?)```/);
-     let parsedResult;
-     try {
-       parsedResult = jsonMatch
-         ? JSON.parse(jsonMatch[1].trim())
-         : JSON.parse(validationResult.trim());
-     } catch {
-       parsedResult = { validated: true, issues: [], summary: validationResult };
-     }
+      if (validationResult) {
+        const jsonMatch = validationResult.match(/```(?:json)?\s*[\r\n]+([\s\S]*?)```/);
+        let parsedResult;
+        try {
+          parsedResult = jsonMatch
+            ? JSON.parse(jsonMatch[1].trim())
+            : JSON.parse(validationResult.trim());
+        } catch {
+          parsedResult = { validated: true, issues: [], summary: validationResult };
+        }
 
-     if (parsedResult.validated && parsedResult.issues.length === 0) {
-       appendMessage("agent", `✅ ${parsedResult.summary || "Verified and complete!"}`);
-       acknowledgeCompletion();
-       return;
-     } else {
+        if (parsedResult.validated && parsedResult.issues.length === 0) {
+          appendMessage("agent", `✅ ${parsedResult.summary || "Verified and complete!"}`);
+          acknowledgeCompletion();
+          return;
+        } else {
           const issuesText =
             parsedResult.issues.length > 0
               ? parsedResult.issues.join(", ")
@@ -621,12 +654,12 @@ if (validationResult) {
             return;
           }
         }
-    } else {
-         appendMessage("agent", "⚠ Validation skipped.");
-         acknowledgeCompletion();
-         return;
-       }
-   }
+      } else {
+        appendMessage("agent", "⚠ Validation skipped.");
+        acknowledgeCompletion();
+        return;
+      }
+    }
     appendMessage("agent", "⚠ No operations found. Asking to continue...");
     const retryFeedback =
       "Your last response did not contain structured operations. Please provide the next step as structured operations, or say 'All steps complete.' if done.";
@@ -710,8 +743,18 @@ async function executeOperationsLoop(initialOps, initialContext, systemPrompt) {
     let verification = "";
     if (hadError) {
       consecutiveFailures++;
+      // Track consecutive failure for telemetry
+      try {
+        trackConsecutiveFailure("execution", consecutiveFailures);
+      } catch (e) {
+        // Non-critical
+      }
+
       if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
-        appendMessage("agent", `❌ ${MAX_CONSECUTIVE_FAILURES} consecutive failures. Stopping to avoid wasted API calls.`);
+        appendMessage(
+          "agent",
+          `❌ ${MAX_CONSECUTIVE_FAILURES} consecutive failures. Stopping to avoid wasted API calls.`
+        );
         appendMessage("agent", "Please try again or describe the issue more specifically.");
         conversationHistory = [];
         stepStack = [];
@@ -760,7 +803,18 @@ async function executeOperationsLoop(initialOps, initialContext, systemPrompt) {
       conversationHistory: [...conversationHistory],
       sheetContext,
       systemPrompt,
+      aiModel: configuredModel,
+      aiEndpoint: configuredEndpoint,
+      phase: "execution",
+      consecutiveFailures: consecutiveFailures,
     });
+
+    // Track execution phase
+    try {
+      trackPhase("execution", !hadError, Date.now() - stepStartTime);
+    } catch (e) {
+      // Non-critical
+    }
 
     const stepTiming = Date.now() - stepStartTime;
     feedbackTotalSteps++;
@@ -815,6 +869,14 @@ async function executeOperationsLoop(initialOps, initialContext, systemPrompt) {
           "state..."
         );
         appendMessage("agent", `🔍 Verifying completion against full ${currentHost} state...`);
+
+        // Track validation phase start
+        const validationStartTime = Date.now();
+        try {
+          trackPhase("validation", true, 0);
+        } catch (e) {
+          // Non-critical
+        }
 
         const fullContext = await getHostFullContextFn()();
         console.log("[validate] Full context:\n", fullContext);
@@ -884,6 +946,14 @@ CRITICAL: Do NOT pass validation unless each requirement is verified. The user w
 
           if (parsedResult.validated && parsedResult.issues.length === 0) {
             console.log("[validate] Validation passed — generating summary...");
+            const validationTiming = Date.now() - validationStartTime;
+
+            // Track validation phase success
+            try {
+              trackPhase("validation", true, validationTiming);
+            } catch (e) {
+              // Non-critical
+            }
 
             try {
               const afterContext = await getHostMetadataFn()();
@@ -990,21 +1060,21 @@ Provide a clear summary of what was done.`,
               scrollChatToBottom();
 
               const bubbleEl = summaryEl.querySelector(".agent-bubble");
-               appendFeedbackButtons(bubbleEl, {
-                 onOk: () => {
-                   submitFeedback("ok", "", taskStats);
-                   console.log("[telemetry] User rated: OK");
-                   acknowledgeCompletion();
-                 },
-                 onBad: () => {
-                   submitFeedback("bad", "", taskStats);
-                   console.log("[telemetry] User rated: Bad");
-                   acknowledgeCompletion();
-                 },
-                 onImprove: (comment) => {
-                   handleImprove(comment, taskStats);
-                 },
-               });
+              appendFeedbackButtons(bubbleEl, {
+                onOk: () => {
+                  submitFeedback("ok", "", taskStats);
+                  console.log("[telemetry] User rated: OK");
+                  acknowledgeCompletion();
+                },
+                onBad: () => {
+                  submitFeedback("bad", "", taskStats);
+                  console.log("[telemetry] User rated: Bad");
+                  acknowledgeCompletion();
+                },
+                onImprove: (comment) => {
+                  handleImprove(comment, taskStats);
+                },
+              });
             }
 
             // Don't reset yet — wait for feedback
@@ -1016,6 +1086,14 @@ Provide a clear summary of what was done.`,
                 : "Validation inconclusive";
             appendMessage("agent", `⚠ ${issuesText}. Asking agent to fix...`);
             console.log("[validate] Validation failed — sending issues back to agent");
+            const validationFailTiming = Date.now() - validationStartTime;
+
+            // Track validation phase failure
+            try {
+              trackPhase("validation", false, validationFailTiming);
+            } catch (e) {
+              // Non-critical
+            }
 
             const fixMessages = [
               { role: "system", content: systemPrompt },
@@ -1026,20 +1104,44 @@ Provide a clear summary of what was done.`,
               },
             ];
 
+            // Track fix phase start
+            try {
+              trackPhase("fix", true, 0);
+            } catch (e) {
+              // Non-critical
+            }
+
             const fixResponse = await streamFromAI(fixMessages, () => isStopped);
-            console.log("[validate] Fix response received:", fixResponse ? `${fixResponse.length} chars` : "null/empty");
+            console.log(
+              "[validate] Fix response received:",
+              fixResponse ? `${fixResponse.length} chars` : "null/empty"
+            );
             if (!fixResponse || isStopped) {
+              // Track fix phase failure
+              try {
+                trackPhase("fix", false, Date.now() - validationStartTime);
+              } catch (e) {
+                // Non-critical
+              }
+
               if (isStopped) {
                 appendMessage("agent", "⏹ Execution stopped.");
               } else {
-                appendMessage("agent", "⚠ Agent did not respond to the fix request. Try again manually.");
+                appendMessage(
+                  "agent",
+                  "⚠ Agent did not respond to the fix request. Try again manually."
+                );
               }
               break;
             }
 
             conversationHistory.push({ role: "assistant", content: fixResponse });
             const fixOps = extractOperations(fixResponse);
-            console.log("[validate] Fix ops extracted:", fixOps ? fixOps.operations.length : 0, "operations");
+            console.log(
+              "[validate] Fix ops extracted:",
+              fixOps ? fixOps.operations.length : 0,
+              "operations"
+            );
             if (fixOps && fixOps.operations.length > 0) {
               validOps.length = 0;
               validOps.push(...fixOps.operations);
@@ -1070,26 +1172,29 @@ Provide a clear summary of what was done.`,
               break;
             }
           }
-      } else {
-           appendMessage("agent", "⚠ Validation skipped — no response from validator.");
-           acknowledgeCompletion();
-           break;
-         }
-         break;
-       }
+        } else {
+          appendMessage("agent", "⚠ Validation skipped — no response from validator.");
+          acknowledgeCompletion();
+          break;
+        }
+        break;
+      }
 
-       // No operations — ask for clarification
-       noOpsRetries++;
-       if (noOpsRetries > MAX_NO_OPS_RETRIES) {
-         appendMessage("agent", "⚠ I've tried multiple times but can't determine the next steps. Would you like to describe what to do next?");
-         isExecuting = false;
-         sendButton.disabled = false;
-         return;
-       }
-       appendMessage("agent", "⚠ No operations found. Asking to continue...");
-       const retryFeedback =
-         "Your last response did not contain structured operations. Please provide the next step as structured operations, or say 'All steps complete.' if done.";
-       conversationHistory.push({ role: "user", content: retryFeedback });
+      // No operations — ask for clarification
+      noOpsRetries++;
+      if (noOpsRetries > MAX_NO_OPS_RETRIES) {
+        appendMessage(
+          "agent",
+          "⚠ I've tried multiple times but can't determine the next steps. Would you like to describe what to do next?"
+        );
+        isExecuting = false;
+        sendButton.disabled = false;
+        return;
+      }
+      appendMessage("agent", "⚠ No operations found. Asking to continue...");
+      const retryFeedback =
+        "Your last response did not contain structured operations. Please provide the next step as structured operations, or say 'All steps complete.' if done.";
+      conversationHistory.push({ role: "user", content: retryFeedback });
 
       const retryResponse = await streamFromAI(
         [
@@ -1108,15 +1213,15 @@ Provide a clear summary of what was done.`,
         break;
       }
 
-     validOps.length = 0;
-       validOps.push(...retryOps.operations);
-       noOpsRetries = 0;
-     } else {
-       validOps.length = 0;
-       validOps.push(...nextOps.operations);
-       noOpsRetries = 0;
-     }
-   }
+      validOps.length = 0;
+      validOps.push(...retryOps.operations);
+      noOpsRetries = 0;
+    } else {
+      validOps.length = 0;
+      validOps.push(...nextOps.operations);
+      noOpsRetries = 0;
+    }
+  }
 
   finalizeStepGroup();
 }
@@ -1438,14 +1543,14 @@ export async function initAgentChat() {
       modelDiscoverTimer = setTimeout(discoverModels, 500);
     }
 
-   if (endpointInput) {
-       endpointInput.addEventListener("change", () => {
-         setAiConfig({ endpoint: endpointInput.value.trim() });
-         // Clear model when endpoint changes
-         if (modelInput) modelInput.value = "";
-         scheduleModelDiscover();
-       });
-     }
+    if (endpointInput) {
+      endpointInput.addEventListener("change", () => {
+        setAiConfig({ endpoint: endpointInput.value.trim() });
+        // Clear model when endpoint changes
+        if (modelInput) modelInput.value = "";
+        scheduleModelDiscover();
+      });
+    }
 
     if (modelInput) {
       modelInput.addEventListener("change", () => {
@@ -1591,13 +1696,13 @@ export async function initAgentChat() {
 
     // ─── Config Toggle & Auto-Deflate ────────────────────────────────────────
 
-   const configBar = document.getElementById("agent-config");
-     const configToggle = document.getElementById("config-toggle");
-     let configExpanded = localStorage.getItem("agentConfigExpanded");
-     if (configExpanded === null) configExpanded = true; // Show on first visit
-     configExpanded = configExpanded === "true";
-     let autoDeflateTimer = null;
-     const AUTO_DEFDELAY = 60000; // 60 seconds
+    const configBar = document.getElementById("agent-config");
+    const configToggle = document.getElementById("config-toggle");
+    let configExpanded = localStorage.getItem("agentConfigExpanded");
+    if (configExpanded === null) configExpanded = true; // Show on first visit
+    configExpanded = configExpanded === "true";
+    let autoDeflateTimer = null;
+    const AUTO_DEFDELAY = 60000; // 60 seconds
 
     function setConfigState(expanded) {
       configExpanded = expanded;
@@ -1632,21 +1737,21 @@ export async function initAgentChat() {
     }
 
     // Pause auto-deflate on any config interaction
-     const configInputs = configBar ? configBar.querySelectorAll("input, button") : [];
-     configInputs.forEach((input) => {
-       input.addEventListener("focus", () => {
-         if (!configExpanded) setConfigState(true);
-         resetAutoDeflate();
-       });
-       input.addEventListener("blur", () => {
-         // Only auto-deflate when focus leaves the entire config area
-         setTimeout(() => {
-           if (configExpanded && !configBar.contains(document.activeElement)) {
-             resetAutoDeflate();
-           }
-         }, 100);
-       });
-     });
+    const configInputs = configBar ? configBar.querySelectorAll("input, button") : [];
+    configInputs.forEach((input) => {
+      input.addEventListener("focus", () => {
+        if (!configExpanded) setConfigState(true);
+        resetAutoDeflate();
+      });
+      input.addEventListener("blur", () => {
+        // Only auto-deflate when focus leaves the entire config area
+        setTimeout(() => {
+          if (configExpanded && !configBar.contains(document.activeElement)) {
+            resetAutoDeflate();
+          }
+        }, 100);
+      });
+    });
 
     // Pause auto-deflate during execution, resume after
     const originalIsExecuting = { value: false };
@@ -1731,8 +1836,8 @@ async function handleSend() {
   }
 
   isExecuting = true;
-   setExecutingState(true);
-   isStopped = false;
+  setExecutingState(true);
+  isStopped = false;
   const sendButton = document.getElementById("chat-send");
   const stopButton = document.getElementById("chat-stop");
   if (sendButton) sendButton.disabled = true;
@@ -1742,6 +1847,7 @@ async function handleSend() {
 
     // Phase 1: Planning
     console.log("[plan] === Starting planning phase ===");
+    const planStartTime = Date.now();
     let sheetContext = await getHostContextFn()();
     console.log("[plan] Context:", sheetContext);
     let systemPrompt = buildSystemPrompt(currentHost, currentMode, sheetContext);
@@ -1761,6 +1867,13 @@ async function handleSend() {
     let planResponse = "";
 
     try {
+      // Track planning phase start
+      try {
+        trackPhase("planning", true, 0);
+      } catch (e) {
+        // Non-critical
+      }
+
       planResponse = await streamFromAI(
         apiMessages,
         () => isStopped,
@@ -1774,8 +1887,50 @@ async function handleSend() {
         }
       );
     } catch (error) {
+      const planTiming = Date.now() - planStartTime;
       stream.element.remove();
       appendMessage("agent", `Error: ${error.message || String(error)}`);
+
+      // Track AI API failure with full context
+      trackStep({
+        stepNumber: 0,
+        userPrompt: originalQuery,
+        plan: "",
+        operations: [],
+        results: [],
+        errors: [`AI API error during planning: ${error.message || String(error)}`],
+        success: false,
+        timingMs: planTiming,
+        aiResponse: "(API error)",
+        verification: "",
+        conversationHistory: apiMessages.map((m) => ({
+          role: m.role,
+          content: typeof m.content === "string" ? m.content.substring(0, 500) : m.content,
+        })),
+        sheetContext,
+        systemPrompt,
+        aiModel: configuredModel,
+        aiEndpoint: configuredEndpoint,
+        phase: "planning",
+        consecutiveFailures: consecutiveFailures,
+      });
+
+      // Track planning phase failure
+      try {
+        trackPhase("planning", false, planTiming);
+      } catch (e) {
+        // Non-critical
+      }
+
+      // Track consecutive failure
+      if (consecutiveFailures > 0) {
+        try {
+          trackConsecutiveFailure("planning", consecutiveFailures);
+        } catch (e) {
+          // Non-critical
+        }
+      }
+
       return;
     }
 
@@ -1786,6 +1941,7 @@ async function handleSend() {
       } else {
         appendMessage("agent", "No response from agent.");
       }
+      const nullTiming = Date.now() - planStartTime;
       trackStep({
         stepNumber: 0,
         userPrompt: originalQuery,
@@ -1796,7 +1952,7 @@ async function handleSend() {
           ? ["Execution stopped by user"]
           : ["AI returned null or empty response during planning"],
         success: false,
-        timingMs: 0,
+        timingMs: nullTiming,
         aiResponse: planResponse || "(null)",
         verification: "",
         conversationHistory: apiMessages.map((m) => ({
@@ -1806,6 +1962,13 @@ async function handleSend() {
         sheetContext,
         systemPrompt,
       });
+
+      // Track planning phase failure
+      try {
+        trackPhase("planning", false, nullTiming);
+      } catch (e) {
+        // Non-critical
+      }
       return;
     }
 
@@ -1814,12 +1977,7 @@ async function handleSend() {
 
     // If JSON was found but unparseable, retry once asking the model to fix it
     let finalOps = ops;
-    if (
-      ops &&
-      ops.operations.length === 0 &&
-      ops.text &&
-      /```json/.test(ops.text)
-    ) {
+    if (ops && ops.operations.length === 0 && ops.text && /```json/.test(ops.text)) {
       console.log("[plan] JSON block found but unparseable — retrying with fix request...");
       const fixMessages = [
         ...apiMessages,
@@ -1865,6 +2023,7 @@ async function handleSend() {
       stream.element.remove();
       appendMessage("agent", "No response from agent.");
       conversationHistory.push({ role: "assistant", content: planResponse });
+      const parseTiming = Date.now() - planStartTime;
       trackStep({
         stepNumber: 0,
         userPrompt: originalQuery,
@@ -1873,7 +2032,7 @@ async function handleSend() {
         results: [],
         errors: ["AI response could not be parsed into structured operations"],
         success: false,
-        timingMs: 0,
+        timingMs: parseTiming,
         aiResponse: planResponse,
         verification: "",
         conversationHistory: apiMessages.map((m) => ({
@@ -1882,7 +2041,18 @@ async function handleSend() {
         })),
         sheetContext,
         systemPrompt,
+        aiModel: configuredModel,
+        aiEndpoint: configuredEndpoint,
+        phase: "planning",
+        retryCount: ops && ops.operations.length === 0 ? 1 : 0,
       });
+
+      // Track planning phase failure
+      try {
+        trackPhase("planning", false, parseTiming);
+      } catch (e) {
+        // Non-critical
+      }
       return;
     }
 
@@ -1895,7 +2065,8 @@ async function handleSend() {
     if (finalOps.operations.length === 0) {
       stream.element.remove();
       if (finalOps._switchMode === "interactive" && currentMode === "explain") {
-        const switchMsg = finalOps._switchMessage || "Switch to interactive mode for modifications?";
+        const switchMsg =
+          finalOps._switchMessage || "Switch to interactive mode for modifications?";
         const msgEl = appendMessage("agent", planResponse || switchMsg);
         const switchBtn = document.createElement("button");
         switchBtn.className = "agent-switch-mode-btn";
@@ -1910,6 +2081,7 @@ async function handleSend() {
         appendMessage("agent", planResponse || "No operations generated.");
       }
       conversationHistory.push({ role: "assistant", content: planResponse });
+      const chatTiming = Date.now() - planStartTime;
       trackStep({
         stepNumber: 0,
         userPrompt: originalQuery,
@@ -1918,7 +2090,7 @@ async function handleSend() {
         results: [],
         errors: ["AI returned 0 operations — pure chat mode"],
         success: false,
-        timingMs: 0,
+        timingMs: chatTiming,
         aiResponse: planResponse,
         verification: "",
         conversationHistory: apiMessages.map((m) => ({
@@ -1927,7 +2099,17 @@ async function handleSend() {
         })),
         sheetContext,
         systemPrompt,
+        aiModel: configuredModel,
+        aiEndpoint: configuredEndpoint,
+        phase: "planning",
       });
+
+      // Track planning phase failure
+      try {
+        trackPhase("planning", false, chatTiming);
+      } catch (e) {
+        // Non-critical
+      }
       return;
     }
 
@@ -1953,6 +2135,7 @@ async function handleSend() {
       stream.element.remove();
       appendMessage("agent", `⚠ Validation errors: ${validationErrors.join("; ")}`);
       conversationHistory.push({ role: "assistant", content: planResponse });
+      const validationTiming = Date.now() - planStartTime;
       trackStep({
         stepNumber: 0,
         userPrompt: originalQuery,
@@ -1961,7 +2144,7 @@ async function handleSend() {
         results: [],
         errors: validationErrors,
         success: false,
-        timingMs: 0,
+        timingMs: validationTiming,
         aiResponse: planResponse,
         verification: "",
         conversationHistory: apiMessages.map((m) => ({
@@ -1970,22 +2153,58 @@ async function handleSend() {
         })),
         sheetContext,
         systemPrompt,
+        aiModel: configuredModel,
+        aiEndpoint: configuredEndpoint,
+        phase: "planning",
       });
+
+      // Track planning phase failure
+      try {
+        trackPhase("planning", false, validationTiming);
+      } catch (e) {
+        // Non-critical
+      }
       return;
     }
 
     // Phase 2: Execute operations loop
     await executeOperationsLoop(ops, sheetContext, systemPrompt);
   } catch (error) {
+    const handleTiming = Date.now() - planStartTime;
     console.error("[agentChat] handleSend error:", error);
     stream?.element?.remove();
     appendMessage("agent", `Error: ${error.message || String(error)}`);
- } finally {
-     isExecuting = false;
-     setExecutingState(false);
-     isStopped = false;
-     if (sendButton) sendButton.disabled = false;
-     if (stopButton) stopButton.style.display = "none";
-     chatInput.focus();
-   }
+
+    // Track unexpected error with full context
+    trackStep({
+      stepNumber: 0,
+      userPrompt: originalQuery,
+      plan: "",
+      operations: [],
+      results: [],
+      errors: [`Unexpected error: ${error.message || String(error)}`],
+      success: false,
+      timingMs: handleTiming,
+      aiResponse: "",
+      verification: "",
+      conversationHistory: apiMessages
+        ? apiMessages.map((m) => ({
+            role: m.role,
+            content: typeof m.content === "string" ? m.content.substring(0, 500) : m.content,
+          }))
+        : [],
+      sheetContext: sheetContext || "",
+      systemPrompt: systemPrompt || "",
+      aiModel: configuredModel,
+      aiEndpoint: configuredEndpoint,
+      phase: "planning",
+    });
+  } finally {
+    isExecuting = false;
+    setExecutingState(false);
+    isStopped = false;
+    if (sendButton) sendButton.disabled = false;
+    if (stopButton) stopButton.style.display = "none";
+    chatInput.focus();
+  }
 }

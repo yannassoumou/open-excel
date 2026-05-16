@@ -16,14 +16,59 @@ let queue = [];
 let errorStats = {
   totalOps: 0,
   totalErrors: 0,
-  errorsByOp: {},  // { createWorksheet: 3, writeValues: 5, ... }
+  errorsByOp: {}, // { createWorksheet: 3, writeValues: 5, ... }
   lastErrorRate: 0,
   alertSent: false,
+  errorDetails: [], // [{opName, error, timestamp, stepNumber}]
+  maxErrorDetails: 50,
 };
 
 const ERROR_ALERT_THRESHOLD = 0.3; // 30%
 const ERROR_ALERT_COOLDOWN_MS = 60 * 60 * 1000; // 1 hour
 let lastAlertTime = 0;
+
+// ─── AI Response Metadata Tracking ───────────────────────────────────────────
+
+let aiResponseStats = {
+  totalRequests: 0,
+  totalSuccess: 0,
+  totalFailure: 0,
+  totalLatencyMs: 0,
+  avgLatencyMs: 0,
+  tokenCount: 0,
+  errorsByStatus: {}, // { "400": 3, "500": 1, ... }
+  lastRequestLatency: 0,
+};
+
+// ─── Phase Tracking ──────────────────────────────────────────────────────────
+
+let phaseStats = {
+  planning: { count: 0, success: 0, failure: 0, totalMs: 0 },
+  execution: { count: 0, success: 0, failure: 0, totalMs: 0 },
+  validation: { count: 0, success: 0, failure: 0, totalMs: 0 },
+  improvement: { count: 0, success: 0, failure: 0, totalMs: 0 },
+  fix: { count: 0, success: 0, failure: 0, totalMs: 0 },
+};
+
+// ─── Model Discovery Tracking ────────────────────────────────────────────────
+
+let modelDiscoveryStats = {
+  totalAttempts: 0,
+  totalSuccess: 0,
+  totalFailure: 0,
+  lastAttempt: null,
+  lastError: null,
+  modelsFound: [],
+};
+
+// ─── Consecutive Failure Tracking ────────────────────────────────────────────
+
+let consecutiveFailureStats = {
+  currentStreak: 0,
+  maxStreak: 0,
+  totalStreaks: 0,
+  streaksByPhase: {}, // { "planning": 3, "execution": 2, ... }
+};
 
 let TELEMETRY_ENDPOINT =
   typeof localStorage !== "undefined"
@@ -58,13 +103,25 @@ function truncate(str, max) {
 /**
  * Record an operation execution result for error tracking.
  */
-export function recordOpResult(opName, success, error) {
+export function recordOpResult(opName, success, error, stepNumber) {
   errorStats.totalOps++;
 
   if (!success) {
     errorStats.totalErrors++;
     errorStats.errorsByOp[opName] = (errorStats.errorsByOp[opName] || 0) + 1;
     errorStats.lastErrorRate = errorStats.totalErrors / errorStats.totalOps;
+
+    // Store error details (message, stack trace, context)
+    const errorDetail = {
+      opName,
+      error: typeof error === "string" ? error : error?.message || String(error),
+      timestamp: new Date().toISOString(),
+      stepNumber: stepNumber || 0,
+    };
+    if (errorStats.errorDetails.length >= errorStats.maxErrorDetails) {
+      errorStats.errorDetails.shift();
+    }
+    errorStats.errorDetails.push(errorDetail);
 
     // Check if we need to alert
     if (errorStats.lastErrorRate >= ERROR_ALERT_THRESHOLD) {
@@ -86,8 +143,8 @@ function sendErrorAlert(opName, stats) {
 
   console.warn(
     `[telemetry] ⚠️ ERROR RATE ALERT: ${Math.round(stats.lastErrorRate * 100)}% error rate ` +
-    `(total: ${stats.totalOps}, errors: ${stats.totalErrors}, ` +
-    `top failure: ${opName}=${stats.errorsByOp[opName]})`
+      `(total: ${stats.totalOps}, errors: ${stats.totalErrors}, ` +
+      `top failure: ${opName}=${stats.errorsByOp[opName]})`
   );
 
   if (!enabled || !sessionId) return;
@@ -103,6 +160,7 @@ function sendErrorAlert(opName, stats) {
       totalErrors: stats.totalErrors,
       errorsByOp: stats.errorsByOp,
       failingOp: opName,
+      errorDetails: stats.errorDetails.slice(-10),
     }),
   })
     .then((res) => {
@@ -118,6 +176,93 @@ function sendErrorAlert(opName, stats) {
  */
 export function getErrorStats() {
   return { ...errorStats };
+}
+
+/**
+ * Record an AI API request (success or failure).
+ */
+export function trackAIRequest(latencyMs, tokenCount, statusCode) {
+  aiResponseStats.totalRequests++;
+  aiResponseStats.lastRequestLatency = latencyMs;
+
+  if (statusCode >= 400) {
+    aiResponseStats.totalFailure++;
+    aiResponseStats.errorsByStatus[statusCode] =
+      (aiResponseStats.errorsByStatus[statusCode] || 0) + 1;
+  } else {
+    aiResponseStats.totalSuccess++;
+  }
+
+  aiResponseStats.totalLatencyMs += latencyMs;
+  aiResponseStats.avgLatencyMs = aiResponseStats.totalLatencyMs / aiResponseStats.totalRequests;
+
+  if (tokenCount) {
+    aiResponseStats.tokenCount += tokenCount;
+  }
+}
+
+/**
+ * Record a phase execution (planning, execution, validation, improvement, fix).
+ */
+export function trackPhase(phase, success, timingMs) {
+  if (!phaseStats[phase]) {
+    phaseStats[phase] = { count: 0, success: 0, failure: 0, totalMs: 0 };
+  }
+  phaseStats[phase].count++;
+  if (success) {
+    phaseStats[phase].success++;
+  } else {
+    phaseStats[phase].failure++;
+  }
+  phaseStats[phase].totalMs += timingMs;
+}
+
+/**
+ * Record model discovery attempt.
+ */
+export function trackModelDiscovery(success, models, error) {
+  modelDiscoveryStats.totalAttempts++;
+  if (success) {
+    modelDiscoveryStats.totalSuccess++;
+    modelDiscoveryStats.modelsFound = models || [];
+  } else {
+    modelDiscoveryStats.totalFailure++;
+    modelDiscoveryStats.lastError =
+      typeof error === "string" ? error : error?.message || String(error);
+  }
+  modelDiscoveryStats.lastAttempt = {
+    timestamp: new Date().toISOString(),
+    success,
+    modelCount: models ? models.length : 0,
+  };
+}
+
+/**
+ * Record consecutive failure event.
+ */
+export function trackConsecutiveFailure(phase, streak) {
+  consecutiveFailureStats.currentStreak = streak;
+  if (streak > consecutiveFailureStats.maxStreak) {
+    consecutiveFailureStats.maxStreak = streak;
+  }
+  if (!consecutiveFailureStats.streaksByPhase[phase]) {
+    consecutiveFailureStats.streaksByPhase[phase] = 0;
+  }
+  consecutiveFailureStats.streaksByPhase[phase]++;
+  consecutiveFailureStats.totalStreaks++;
+}
+
+/**
+ * Get all telemetry stats (for debugging / UI display).
+ */
+export function getAllStats() {
+  return {
+    errorStats,
+    aiResponseStats,
+    phaseStats,
+    modelDiscoveryStats,
+    consecutiveFailureStats,
+  };
 }
 
 /**
@@ -222,6 +367,13 @@ export function trackStep(data) {
         : [],
       sheetContext: truncate(data.sheetContext, 2000),
       systemPrompt: truncate(data.systemPrompt, 2000),
+      // New fields for enhanced telemetry
+      aiResponseTokens: data.aiResponseTokens || undefined,
+      aiModel: data.aiModel || undefined,
+      aiEndpoint: data.aiEndpoint || undefined,
+      phase: data.phase || undefined,
+      consecutiveFailures: data.consecutiveFailures || 0,
+      retryCount: data.retryCount || 0,
     }),
   });
 
@@ -304,10 +456,18 @@ export function flush(completed = true) {
       "[telemetry] Sending flush to:",
       `${TELEMETRY_ENDPOINT}/sessions/${sessionId}/flush`
     );
+    const allStats = getAllStats();
     fetch(`${TELEMETRY_ENDPOINT}/sessions/${sessionId}/flush`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ completed, completedAt: new Date().toISOString() }),
+      body: JSON.stringify({
+        completed,
+        completedAt: new Date().toISOString(),
+        aiResponseStats: allStats.aiResponseStats,
+        phaseStats: allStats.phaseStats,
+        modelDiscoveryStats: allStats.modelDiscoveryStats,
+        consecutiveFailureStats: allStats.consecutiveFailureStats,
+      }),
     })
       .then((res) => {
         console.log("[telemetry] Flush response status:", res.status);
@@ -331,8 +491,41 @@ export function reset() {
     errorsByOp: {},
     lastErrorRate: 0,
     alertSent: false,
+    errorDetails: [],
+    maxErrorDetails: 50,
   };
   lastAlertTime = 0;
+  aiResponseStats = {
+    totalRequests: 0,
+    totalSuccess: 0,
+    totalFailure: 0,
+    totalLatencyMs: 0,
+    avgLatencyMs: 0,
+    tokenCount: 0,
+    errorsByStatus: {},
+    lastRequestLatency: 0,
+  };
+  phaseStats = {
+    planning: { count: 0, success: 0, failure: 0, totalMs: 0 },
+    execution: { count: 0, success: 0, failure: 0, totalMs: 0 },
+    validation: { count: 0, success: 0, failure: 0, totalMs: 0 },
+    improvement: { count: 0, success: 0, failure: 0, totalMs: 0 },
+    fix: { count: 0, success: 0, failure: 0, totalMs: 0 },
+  };
+  modelDiscoveryStats = {
+    totalAttempts: 0,
+    totalSuccess: 0,
+    totalFailure: 0,
+    lastAttempt: null,
+    lastError: null,
+    modelsFound: [],
+  };
+  consecutiveFailureStats = {
+    currentStreak: 0,
+    maxStreak: 0,
+    totalStreaks: 0,
+    streaksByPhase: {},
+  };
 }
 
 // ─── Internal ────────────────────────────────────────────────────────────────
