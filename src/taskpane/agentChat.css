@@ -935,18 +935,18 @@
 
 .agent-input-area {
   display: flex;
-  gap: 10px;
-  padding: 14px 16px;
+  gap: 8px;
+  padding: 12px 16px 16px;
   border-top: 1px solid var(--chat-border);
   background: var(--chat-surface);
-  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.03);
+  box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.04);
   align-items: flex-end;
 }
 
 .agent-input-area textarea {
   flex: 1;
   padding: 10px 14px;
-  border: 1px solid var(--chat-border);
+  border: 1.5px solid var(--chat-border);
   border-radius: var(--chat-radius-md);
   font-size: 14px;
   font-family: inherit;
@@ -970,40 +970,97 @@
   background: var(--chat-surface);
 }
 
-.agent-input-area button {
-  padding: 10px 22px;
-  background: var(--chat-accent);
-  color: var(--chat-user-text);
-  border: none;
-  border-radius: var(--chat-radius-md);
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.15s;
-  align-self: flex-end;
-  height: 44px;
-  font-family: inherit;
-  letter-spacing: 0.01em;
-  white-space: nowrap;
+/* ─── Button Group ──────────────────────────────────────────────────────────── */
+
+.input-btn-group {
+  display: flex;
+  gap: 6px;
+  align-items: flex-end;
+  flex-shrink: 0;
 }
 
-.agent-input-area button:hover {
+/* Shared base for all input-area buttons */
+.input-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: var(--chat-radius-sm);
+  cursor: pointer;
+  transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+  font-family: inherit;
+  flex-shrink: 0;
+}
+
+.input-btn svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+/* Send button — primary accent */
+.input-btn-send {
+  background: var(--chat-accent);
+  color: var(--chat-user-text);
+}
+
+.input-btn-send:hover:not(:disabled) {
   background: var(--chat-accent-hover);
   box-shadow: var(--chat-shadow-md);
   transform: translateY(-1px);
 }
 
-.agent-input-area button:active {
+.input-btn-send:active:not(:disabled) {
   transform: translateY(0);
   box-shadow: var(--chat-shadow-sm);
 }
 
-.agent-input-area button:disabled {
+.input-btn-send:disabled {
   background: var(--chat-border);
   color: var(--chat-text-muted);
   cursor: not-allowed;
-  box-shadow: none;
-  transform: none;
+}
+
+/* Stop button — danger with pulse animation */
+.input-btn-stop {
+  background: var(--chat-error-text);
+  color: #fff;
+  animation: stopPulse 1.5s ease-in-out infinite;
+}
+
+.input-btn-stop:hover {
+  background: #b91c1c;
+  animation: none;
+  box-shadow: var(--chat-shadow-md);
+}
+
+@keyframes stopPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.3); }
+  50% { box-shadow: 0 0 0 6px rgba(220, 38, 38, 0); }
+}
+
+/* Clear button — subtle */
+.input-btn-clear {
+  background: transparent;
+  color: var(--chat-text-muted);
+}
+
+.input-btn-clear:hover {
+  background: var(--chat-bg);
+  color: var(--chat-error-text);
+}
+
+/* Image upload button — subtle */
+.input-btn-image {
+  background: transparent;
+  color: var(--chat-text-muted);
+}
+
+.input-btn-image:hover {
+  background: var(--chat-bg);
+  color: var(--chat-accent);
 }
 
 /* ─── Feedback UI ───────────────────────────────────────────────────────────── */
