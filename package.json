@@ -10,6 +10,8 @@
   "scripts": {
     "build": "webpack --mode production",
     "build:dev": "webpack --mode development",
+    "deploy:manifest:ppt": "bash scripts/deploy-ppt-manifest.sh",
+    "deploy:manifest:ppt:version": "bash scripts/deploy-ppt-manifest.sh",
     "dev-server": "webpack serve --mode development",
     "lint": "office-addin-lint check",
     "lint:fix": "office-addin-lint fix",
